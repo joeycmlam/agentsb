@@ -29,6 +29,137 @@ class JiraAnalyst:
         self.jira = JIRA(options=options, basic_auth=(self.user, self.token))
         print(f"✓ Connected to JIRA: {self.server}")
     
+    def get_issue(self, issue_key):
+        """Read a specific JIRA issue and return detailed information"""
+        print(f"\n🔍 Reading issue: {issue_key}")
+        
+        try:
+            issue = self.jira.issue(issue_key)
+            
+            # Extract comprehensive issue details
+            issue_data = {
+                'key': issue.key,
+                'summary': issue.fields.summary,
+                'description': self._extract_description(issue.fields.description),
+                'status': issue.fields.status.name,
+                'priority': issue.fields.priority.name if issue.fields.priority else 'None',
+                'issue_type': issue.fields.issuetype.name,
+                'assignee': issue.fields.assignee.displayName if issue.fields.assignee else 'Unassigned',
+                'reporter': issue.fields.reporter.displayName if issue.fields.reporter else 'Unknown',
+                'created': issue.fields.created,
+                'updated': issue.fields.updated,
+                'due_date': issue.fields.duedate if hasattr(issue.fields, 'duedate') else None,
+                'labels': issue.fields.labels if hasattr(issue.fields, 'labels') else [],
+                'components': [c.name for c in issue.fields.components] if hasattr(issue.fields, 'components') else [],
+                'fix_versions': [v.name for v in issue.fields.fixVersions] if hasattr(issue.fields, 'fixVersions') else [],
+                'comments': self._extract_comments(issue),
+                'subtasks': [{'key': st.key, 'summary': st.fields.summary} for st in issue.fields.subtasks] if hasattr(issue.fields, 'subtasks') else [],
+                'links': self._extract_links(issue),
+                'raw_issue': issue  # Store raw issue for further processing
+            }
+            
+            print(f"✓ Retrieved issue: {issue.key} - {issue.fields.summary}")
+            return issue_data
+            
+        except Exception as e:
+            print(f"❌ Error reading issue {issue_key}: {str(e)}")
+            raise
+    
+    def update_issue_with_analysis(self, issue_key, analysis_content, comment_prefix="BA Analysis"):
+        """Update a JIRA issue with analysis as a comment"""
+        print(f"\n📝 Updating issue: {issue_key}")
+        
+        try:
+            issue = self.jira.issue(issue_key)
+            
+            # Format the comment with proper markdown
+            comment_body = f"*{comment_prefix}*\n\n{analysis_content}"
+            
+            # Add comment to the issue
+            self.jira.add_comment(issue, comment_body)
+            
+            print(f"✓ Successfully added analysis comment to {issue_key}")
+            return {
+                'success': True,
+                'issue_key': issue_key,
+                'message': f"Analysis added to {issue_key}"
+            }
+            
+        except Exception as e:
+            error_msg = f"Error updating issue {issue_key}: {str(e)}"
+            print(f"❌ {error_msg}")
+            return {
+                'success': False,
+                'issue_key': issue_key,
+                'error': error_msg
+            }
+    
+    def _extract_description(self, description):
+        """Extract description text from JIRA field (handles both string and rich text)"""
+        if not description:
+            return ""
+        
+        # If description is a dict (Atlassian Document Format for JIRA Cloud)
+        if isinstance(description, dict):
+            return self._extract_text_from_adf(description)
+        
+        # If it's already a string
+        return str(description)
+    
+    def _extract_text_from_adf(self, adf_content):
+        """Extract plain text from Atlassian Document Format (ADF)"""
+        if not isinstance(adf_content, dict):
+            return str(adf_content)
+        
+        text_parts = []
+        
+        def extract_text(node):
+            if isinstance(node, dict):
+                if node.get('type') == 'text':
+                    text_parts.append(node.get('text', ''))
+                
+                # Recursively process content
+                if 'content' in node:
+                    for child in node['content']:
+                        extract_text(child)
+        
+        extract_text(adf_content)
+        return '\n'.join(text_parts)
+    
+    def _extract_comments(self, issue):
+        """Extract comments from an issue"""
+        comments = []
+        try:
+            for comment in issue.fields.comment.comments:
+                comments.append({
+                    'author': comment.author.displayName if hasattr(comment.author, 'displayName') else 'Unknown',
+                    'body': self._extract_description(comment.body),
+                    'created': comment.created
+                })
+        except:
+            pass
+        return comments
+    
+    def _extract_links(self, issue):
+        """Extract issue links"""
+        links = []
+        try:
+            if hasattr(issue.fields, 'issuelinks'):
+                for link in issue.fields.issuelinks:
+                    link_info = {'type': link.type.name}
+                    if hasattr(link, 'outwardIssue'):
+                        link_info['direction'] = 'outward'
+                        link_info['issue'] = link.outwardIssue.key
+                        link_info['summary'] = link.outwardIssue.fields.summary
+                    elif hasattr(link, 'inwardIssue'):
+                        link_info['direction'] = 'inward'
+                        link_info['issue'] = link.inwardIssue.key
+                        link_info['summary'] = link.inwardIssue.fields.summary
+                    links.append(link_info)
+        except:
+            pass
+        return links
+    
     def analyze_project(self, project_key, max_results=1000):
         """Analyze a JIRA project and return comprehensive insights"""
         print(f"\n🔍 Analyzing project: {project_key}")
@@ -428,28 +559,101 @@ class JiraAnalyst:
 def main():
     """Main entry point"""
     if len(sys.argv) < 2:
-        print("Usage: python jira_analyst.py <PROJECT_KEY> [output_file]")
-        print("Example: python jira_analyst.py PROJ analysis-report.md")
+        print("Usage:")
+        print("  Analyze project: python jira_analyst.py <PROJECT_KEY> [output_file]")
+        print("  Read issue:      python jira_analyst.py --issue <ISSUE_KEY> [--json]")
+        print("  Update issue:    python jira_analyst.py --update <ISSUE_KEY> --comment <comment_text>")
+        print("\nExamples:")
+        print("  python jira_analyst.py PROJ analysis-report.md")
+        print("  python jira_analyst.py --issue PROJ-123")
+        print("  python jira_analyst.py --issue PROJ-123 --json")
+        print("  python jira_analyst.py --update PROJ-123 --comment 'Analysis complete'")
         sys.exit(1)
-    
-    project_key = sys.argv[1]
-    output_file = sys.argv[2] if len(sys.argv) > 2 else None
     
     try:
         analyst = JiraAnalyst()
-        report = analyst.analyze_project(project_key)
         
-        print("\n" + "="*80)
-        print(report)
-        print("="*80)
+        # Handle --issue flag to read a specific issue
+        if sys.argv[1] == '--issue' and len(sys.argv) >= 3:
+            issue_key = sys.argv[2]
+            issue_data = analyst.get_issue(issue_key)
+            
+            # Check if JSON output is requested
+            if '--json' in sys.argv:
+                # Remove raw_issue before JSON serialization
+                issue_data_json = {k: v for k, v in issue_data.items() if k != 'raw_issue'}
+                print(json.dumps(issue_data_json, indent=2, default=str))
+            else:
+                print("\n" + "="*80)
+                print(f"Issue: {issue_data['key']}")
+                print(f"Summary: {issue_data['summary']}")
+                print(f"Status: {issue_data['status']}")
+                print(f"Priority: {issue_data['priority']}")
+                print(f"Type: {issue_data['issue_type']}")
+                print(f"Assignee: {issue_data['assignee']}")
+                print(f"Reporter: {issue_data['reporter']}")
+                print(f"\nDescription:\n{issue_data['description']}")
+                if issue_data['labels']:
+                    print(f"\nLabels: {', '.join(issue_data['labels'])}")
+                if issue_data['components']:
+                    print(f"Components: {', '.join(issue_data['components'])}")
+                if issue_data['links']:
+                    print(f"\nLinked Issues:")
+                    for link in issue_data['links']:
+                        print(f"  - {link['type']} ({link['direction']}): {link['issue']} - {link['summary']}")
+                if issue_data['comments']:
+                    print(f"\nComments ({len(issue_data['comments'])}):")
+                    for i, comment in enumerate(issue_data['comments'][:3], 1):
+                        print(f"  {i}. {comment['author']}: {comment['body'][:100]}...")
+                print("="*80)
         
-        if output_file:
-            with open(output_file, 'w') as f:
-                f.write(report)
-            print(f"\n✅ Report saved to: {output_file}")
+        # Handle --update flag to update an issue with analysis
+        elif sys.argv[1] == '--update' and len(sys.argv) >= 3:
+            issue_key = sys.argv[2]
+            
+            # Get comment text from --comment flag or read from stdin
+            comment_text = None
+            if '--comment' in sys.argv:
+                comment_idx = sys.argv.index('--comment')
+                if comment_idx + 1 < len(sys.argv):
+                    comment_text = sys.argv[comment_idx + 1]
+            
+            if not comment_text:
+                print("Reading analysis from stdin... (Press Ctrl+D when done)")
+                comment_text = sys.stdin.read()
+            
+            if not comment_text or not comment_text.strip():
+                print("❌ Error: No comment text provided")
+                sys.exit(1)
+            
+            result = analyst.update_issue_with_analysis(issue_key, comment_text)
+            
+            if result['success']:
+                print(f"\n✅ {result['message']}")
+            else:
+                print(f"\n❌ {result['error']}")
+                sys.exit(1)
+        
+        # Default: analyze entire project
+        else:
+            project_key = sys.argv[1]
+            output_file = sys.argv[2] if len(sys.argv) > 2 else None
+            
+            report = analyst.analyze_project(project_key)
+            
+            print("\n" + "="*80)
+            print(report)
+            print("="*80)
+            
+            if output_file:
+                with open(output_file, 'w') as f:
+                    f.write(report)
+                print(f"\n✅ Report saved to: {output_file}")
         
     except Exception as e:
         print(f"\n❌ Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 
