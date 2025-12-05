@@ -1,40 +1,64 @@
 # orchestrator/main.py
-from crewai import Agent, Task, Crew, Process
+from crewai import Agent, Task, Crew, Process, LLM
 from jira import JIRA
-from github import Github
+from github import Github, Auth
 import os
 
 # Initialize APIs
-jira = JIRA('https://joeycmlam-1762529818344.atlassian.net/', auth=(os.getenv('JIRA_USER'), os.getenv('JIRA_TOKEN')))
-github = Github(os.getenv('GITHUB_TOKEN'))
+jira_user = os.getenv('JIRA_USER')
+jira_token = os.getenv('JIRA_API_TOKEN')
 
-# Define CrewAI Agents (each uses GitHub Copilot CLI internally)
+# For Atlassian Cloud, use basic_auth instead of auth
+jira = JIRA(
+    server='https://joeycmlam-1762529818344.atlassian.net',
+    basic_auth=(jira_user, jira_token)
+) if jira_user and jira_token else None
+
+github_token = os.getenv('GITHUB_TOKEN')
+if github_token:
+    auth = Auth.Token(github_token)
+    github = Github(auth=auth)
+else:
+    github = None
+
+# Check for required API key
+anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
+if not anthropic_api_key:
+    raise ValueError("ANTHROPIC_API_KEY environment variable is required. Please set it before running.")
+
+# Configure Claude LLM
+llm = LLM(
+    model="claude-3-5-sonnet-20241022",
+    provider="anthropic"
+)
+
+# Define CrewAI Agents (each uses Claude via Anthropic)
 requirements_analyst = Agent(
     role="Requirements Analyst",
     goal="Analyze JIRA tickets and generate requirements",
     backstory="Senior BA with expertise in clarifying requirements",
-    llm="claude-3.5-sonnet",  # Uses your Copilot license
+    llm=llm,
 )
 
 architect = Agent(
     role="Solution Architect",
     goal="Design scalable solutions",
     backstory="Experienced system architect",
-    llm="claude-3.5-sonnet",
+    llm=llm,
 )
 
 backend_dev = Agent(
     role="Backend Developer",
     goal="Implement with TDD",
     backstory="Senior backend engineer",
-    llm="claude-3.5-sonnet",
+    llm=llm,
 )
 
 qa_engineer = Agent(
     role="QA Engineer",
     goal="Ensure test coverage",
     backstory="QA lead",
-    llm="claude-3.5-sonnet",
+    llm=llm,
 )
 
 # Define Tasks
@@ -70,7 +94,8 @@ crew = Crew(
     manager_agent=Agent(
         role="Workflow Manager",
         goal="Coordinate development workflow",
-        llm="claude-3.5-sonnet",
+        backstory="Experienced workflow manager",
+        llm=llm,
     ),
 )
 
