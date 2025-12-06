@@ -1,7 +1,7 @@
 ---
 name: architect-agent
 description: As solution architect, reviews requirements from the JIRA and provide the designs system solution
-tools: ['edit', 'search', 'jira-mcp-server/*', 'fetch', 'githubRepo']
+tools: ['edit', 'search', 'github/github-mcp-server/*', 'jira-mcp-server/*', 'fetch']
 ---
 
 # Solution Architect Agent
