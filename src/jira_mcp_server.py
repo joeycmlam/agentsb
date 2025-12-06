@@ -5,17 +5,26 @@ JIRA MCP Server
 A Model Context Protocol server that exposes JIRA operations as tools for AI agents.
 This server provides capabilities to interact with JIRA issues, including reading,
 commenting, and managing attachments.
+
+Usage:
+    python3 jira_mcp_server.py
+
+Environment Variables:
+    JIRA_URL - JIRA instance URL (e.g., https://your-domain.atlassian.net)
+    JIRA_USER - JIRA username/email
+    JIRA_API_TOKEN - JIRA API token
 """
 
 import os
 import json
 import asyncio
+import sys
 from typing import Any, Optional
 from pathlib import Path
 
 import requests
 from mcp.server import Server
-from mcp.types import Tool, TextContent, ImageContent, EmbeddedResource
+from mcp.types import Tool, TextContent
 from mcp.server.stdio import stdio_server
 
 
@@ -564,7 +573,9 @@ class JiraMcpServer:
         self.jira_client = JiraClientAsync(jira_url, jira_user, jira_token)
     
     async def run(self) -> None:
-        """Run the MCP server."""
+        """Run the MCP server with stdio transport."""
+        self._initialize_jira_client()
+        
         async with stdio_server() as (read_stream, write_stream):
             await self.server.run(
                 read_stream,
@@ -573,11 +584,34 @@ class JiraMcpServer:
             )
 
 
+def validate_environment() -> None:
+    """Validate required environment variables are set."""
+    required_vars = ['JIRA_URL', 'JIRA_USER', 'JIRA_API_TOKEN']
+    missing_vars = [var for var in required_vars if not os.getenv(var)]
+    
+    if missing_vars:
+        print(f"Error: Missing required environment variables: {', '.join(missing_vars)}", file=sys.stderr)
+        print("\nPlease set the following environment variables:", file=sys.stderr)
+        print("  JIRA_URL - Your JIRA instance URL (e.g., https://your-domain.atlassian.net)", file=sys.stderr)
+        print("  JIRA_USER - Your JIRA username/email", file=sys.stderr)
+        print("  JIRA_API_TOKEN - Your JIRA API token", file=sys.stderr)
+        sys.exit(1)
+
+
 async def main() -> None:
     """Main entry point for the MCP server."""
+    validate_environment()
+    
     server = JiraMcpServer()
     await server.run()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nServer stopped by user", file=sys.stderr)
+        sys.exit(0)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
