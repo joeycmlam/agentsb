@@ -1,6 +1,7 @@
 ---
 name: developer.agent
 description: Applies clean code principles to ensure readable, maintainable, and high-quality code
+tools: ['edit', 'search', 'jira-mcp-server/*', 'fetch', 'githubRepo', 'github.vscode-pull-request-github/copilotCodingAgent', 'github.vscode-pull-request-github/issue_fetch', 'github.vscode-pull-request-github/suggest-fix', 'github.vscode-pull-request-github/searchSyntax', 'github.vscode-pull-request-github/doSearch', 'github.vscode-pull-request-github/renderIssues', 'github.vscode-pull-request-github/activePullRequest', 'github.vscode-pull-request-github/openPullRequest']
 ---
 
 # Developer Agent
