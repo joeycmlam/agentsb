@@ -437,39 +437,6 @@ Create doc/design/TICKET-123-design.md
 # Save each diagram type as separate .mmd file
 # This allows version control, reuse, and easy upload to JIRA
 
-# Optional: C4 Context Diagram - System boundary and external actors
-cat > doc/architecture/diagrams/TICKET-123-context.mmd << 'EOF'
-C4Context
-    title System Context for [Feature Name]
-    Person(user, "User", "End user")
-    System(system, "[System]", "Core system")
-    System_Ext(external, "External API", "Third-party")
-    Rel(user, system, "Uses")
-    Rel(system, external, "Integrates")
-EOF
-
-# Optional: C4 Container Diagram - High-level components
-cat > doc/architecture/diagrams/TICKET-123-container.mmd << 'EOF'
-C4Container
-    title Container Diagram for [Feature Name]
-    Container(web, "Web App", "React", "UI")
-    Container(api, "API", "Node.js", "Backend")
-    ContainerDb(db, "Database", "PostgreSQL", "Data")
-    Rel(web, api, "HTTPS")
-    Rel(api, db, "SQL")
-EOF
-
-# Optional: C4 Component Diagram - Detailed internal structure
-cat > doc/architecture/diagrams/TICKET-123-component.mmd << 'EOF'
-C4Component
-    title Component Diagram for [Feature Name]
-    Component(ctrl, "Controller", "Handles requests")
-    Component(svc, "Service", "Business logic")
-    Component(repo, "Repository", "Data access")
-    Rel(ctrl, svc, "Uses")
-    Rel(svc, repo, "Uses")
-EOF
-
 # Optional: Sequence Diagram - Critical workflows
 cat > doc/architecture/diagrams/TICKET-123-sequence.mmd << 'EOF'
 sequenceDiagram
@@ -485,19 +452,6 @@ sequenceDiagram
     API-->>User: Result
 EOF
 
-# Optional: Entity Relationship Diagram - Data model
-cat > doc/architecture/diagrams/TICKET-123-erd.mmd << 'EOF'
-erDiagram
-    USER ||--o{ ORDER : places
-    USER {
-        int id PK
-        string email
-    }
-    ORDER {
-        int id PK
-        int user_id FK
-    }
-EOF
 
 # Optional: Class Diagram - Object model
 cat > doc/architecture/diagrams/TICKET-123-class.mmd << 'EOF'
@@ -513,18 +467,6 @@ classDiagram
     UserService --> UserRepository
 EOF
 
-# Optional: State Diagram - State transitions
-cat > doc/architecture/diagrams/TICKET-123-state.mmd << 'EOF'
-stateDiagram-v2
-    [*] --> Draft
-    Draft --> Review
-    Review --> Approved
-    Review --> Rejected
-    Approved --> [*]
-    Rejected --> Draft
-EOF
-```
-
 ### 5. Commit and Push to Remote
 ```bash
 # Stage all design documents and diagrams
@@ -536,13 +478,6 @@ git status
 
 # Commit with detailed message
 git commit -m "Add architecture design for TICKET-123
-
-- Complete system architecture design document
-- C4 Context, Container, and Component diagrams
-- Sequence diagrams for critical workflows
-- Entity Relationship Diagram for data model
-- Addressed requirements from JIRA comments
-- Analyzed attached specifications and mockups
 
 JIRA: TICKET-123"
 
@@ -562,31 +497,7 @@ jira_upload_attachment(
     file_path="doc/architecture/diagrams/TICKET-123-context.mmd"
 )
 
-jira_upload_attachment(
-    issue_key="TICKET-123", 
-    file_path="doc/architecture/diagrams/TICKET-123-container.mmd"
-)
 
-jira_upload_attachment(
-    issue_key="TICKET-123",
-    file_path="doc/architecture/diagrams/TICKET-123-component.mmd"
-)
-
-jira_upload_attachment(
-    issue_key="TICKET-123",
-    file_path="doc/architecture/diagrams/TICKET-123-sequence.mmd"
-)
-
-jira_upload_attachment(
-    issue_key="TICKET-123",
-    file_path="doc/architecture/diagrams/TICKET-123-erd.mmd"
-)
-
-# Optional: Upload the complete design document
-jira_upload_attachment(
-    issue_key="TICKET-123",
-    file_path="doc/design/TICKET-123-design.md"
-)
 
 # Add comprehensive architecture comment
 jira_add_comment(
@@ -708,22 +619,9 @@ The AI agent will:
 
 ## Mermaid Diagram Types
 
-### C4 Diagrams (System Architecture)
-```mermaid
-C4Context
-C4Container
-C4Component
-C4Dynamic
-```
-
 ### Sequence Diagrams (Workflows)
 ```mermaid
 sequenceDiagram
-```
-
-### Entity Relationship Diagrams (Data Models)
-```mermaid
-erDiagram
 ```
 
 ### Flowcharts (Logic Flow)
@@ -736,22 +634,12 @@ flowchart TD
 classDiagram
 ```
 
-### State Diagrams (State Machines)
-```mermaid
-stateDiagram-v2
-```
-
 ## Output Deliverables
 
 1. **Design Document:** `doc/design/TICKET_ID-design.md` with comprehensive architecture
 2. **Diagram Files:** Separate `.mmd` files in `doc/architecture/diagrams/`
-   - `{TICKET_ID}-context.mmd` - C4 Context Diagram
-   - `{TICKET_ID}-container.mmd` - C4 Container Diagram
-   - `{TICKET_ID}-component.mmd` - C4 Component Diagram
    - `{TICKET_ID}-sequence.mmd` - Sequence Diagram
-   - `{TICKET_ID}-erd.mmd` - Entity Relationship Diagram
    - `{TICKET_ID}-class.mmd` - Class Diagram (optional)
-   - `{TICKET_ID}-state.mmd` - State Diagram (optional)
 3. **Git Branch:** `design/{TICKET_ID}` or `arch/{TICKET_ID}` pushed to remote
 4. **JIRA Attachments:** All `.mmd` diagram files uploaded to ticket
 5. **JIRA Comment:** Comprehensive architecture summary with:
