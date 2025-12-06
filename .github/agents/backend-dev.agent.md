@@ -1,7 +1,6 @@
 ---
 name: Backend Developer
 description: Implements backend changes with TDD and comprehensive testing
-target: github-copilot
 ---
 
 # Backend Developer Agent

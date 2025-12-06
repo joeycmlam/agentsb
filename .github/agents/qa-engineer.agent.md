@@ -1,7 +1,6 @@
 ---
-name: QA Engineer
+name: QA-Engineer
 description: Reviews implementation and enhances test coverage
-target: github-copilot
 ---
 
 # QA Engineer Agent
