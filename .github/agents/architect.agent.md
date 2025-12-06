@@ -49,7 +49,7 @@ You are a senior software architect with expertise in system design and patterns
 6. **Upload Diagrams to JIRA:**
    - Save all Mermaid diagrams as separate `.mmd` files in `doc/architecture/diagrams/`
    - Use `jira_upload_attachment` to upload each `.mmd` diagram file to JIRA
-   - Optionally convert diagrams to PNG using mermaid-cli if available
+   - Optionally convert diagrams to PNG using mermaid diagram if available
    - Use `jira_add_comment` to post architecture summary with:
      * Overview of the architecture design
      * List of uploaded diagram files with descriptions
