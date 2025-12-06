@@ -1,0 +1,11 @@
+C4Context
+    title System Context Diagram for JSON Validation Tool
+    
+    Person(user, "QA Engineer", "Runs validation checks")
+    System(json_validator, "JSON Validation Tool", "Compares JSON files and reports differences")
+    System_Ext(filesystem, "File System", "Source of JSON files")
+    System_Ext(ci_cd, "CI/CD Pipeline", "Automated validation")
+    
+    Rel(user, json_validator, "Uses", "CLI")
+    Rel(json_validator, filesystem, "Reads", "JSON files")
+    Rel(ci_cd, json_validator, "Integrates", "Exit codes")

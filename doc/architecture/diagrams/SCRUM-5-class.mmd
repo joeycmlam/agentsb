@@ -1,0 +1,42 @@
+classDiagram
+    class JsonComparator {
+        +compare(baseline_path, comparison_path)
+        +find_differences(obj1, obj2, path)
+        -apply_filters(differences)
+    }
+    
+    class JsonParser {
+        +parse_file(file_path)
+        +validate_json(content)
+        -handle_parse_error(error, file_path)
+    }
+    
+    class FieldFilter {
+        +should_ignore(path)
+        +filter_differences(differences)
+        -match_patterns(path, patterns)
+    }
+    
+    class ArrayComparator {
+        +compare_arrays(arr1, arr2, order_sensitive)
+        +find_order_differences(arr1, arr2)
+    }
+    
+    class ReportGenerator {
+        +generate_json_report(differences)
+        +generate_console_report(differences)
+        +generate_html_report(differences)
+    }
+    
+    class Difference {
+        +path: str
+        +baseline_value: any
+        +comparison_value: any
+        +type: str
+    }
+    
+    JsonComparator --> JsonParser
+    JsonComparator --> FieldFilter
+    JsonComparator --> ArrayComparator
+    JsonComparator --> ReportGenerator
+    ReportGenerator --> Difference
