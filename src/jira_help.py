@@ -2,15 +2,18 @@
 """
 JIRA Helper Script
 Usage:
-    python3 jira_help.py [JIRA-NUMBER]               # Get JIRA issue details
-    python3 jira_help.py [JIRA-NUMBER] [update-info] # Add comment to JIRA issue
+    python3 jira_help.py [JIRA-NUMBER]                              # Get JIRA issue details
+    python3 jira_help.py [JIRA-NUMBER] [comment-text]               # Add comment to JIRA issue
+    python3 jira_help.py [JIRA-NUMBER] --attach [file1] [file2]...  # Upload attachments
+    python3 jira_help.py [JIRA-NUMBER] --comment [text] --attach [files]... # Comment + attachments
 """
 
 import sys
 import os
 import json
 import requests
-from typing import Optional
+from typing import Optional, List
+from pathlib import Path
 
 
 class JiraClient:
@@ -113,6 +116,126 @@ class JiraClient:
         except requests.exceptions.RequestException as e:
             print(f"Error: Failed to connect to JIRA - {e}")
             return False
+    
+    def upload_attachment(self, issue_key: str, file_path: str) -> bool:
+        """
+        Upload an attachment to a JIRA issue.
+        
+        Args:
+            issue_key: JIRA issue key (e.g., PROJ-123)
+            file_path: Path to the file to upload
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self._validate_file_path(file_path):
+            return False
+        
+        endpoint = f"{self.url}/rest/api/3/issue/{issue_key}/attachments"
+        attachment_headers = {
+            'Accept': 'application/json',
+            'X-Atlassian-Token': 'no-check'
+        }
+        
+        file_name = Path(file_path).name
+        
+        try:
+            with open(file_path, 'rb') as file:
+                files = {'file': (file_name, file)}
+                response = requests.post(
+                    endpoint,
+                    auth=self.auth,
+                    headers=attachment_headers,
+                    files=files,
+                    timeout=60
+                )
+            
+            response.raise_for_status()
+            print(f"✓ Attachment '{file_name}' uploaded successfully to {issue_key}")
+            return True
+            
+        except FileNotFoundError:
+            print(f"Error: File not found - {file_path}")
+            return False
+        except requests.exceptions.HTTPError as e:
+            self._handle_http_error(response, issue_key, e)
+            return False
+        except requests.exceptions.RequestException as e:
+            print(f"Error: Failed to upload attachment - {e}")
+            return False
+    
+    def upload_attachments(self, issue_key: str, file_paths: List[str]) -> bool:
+        """
+        Upload multiple attachments to a JIRA issue.
+        
+        Args:
+            issue_key: JIRA issue key (e.g., PROJ-123)
+            file_paths: List of file paths to upload
+            
+        Returns:
+            True if all uploads successful, False otherwise
+        """
+        if not file_paths:
+            print("Error: No file paths provided")
+            return False
+        
+        all_successful = True
+        for file_path in file_paths:
+            if not self.upload_attachment(issue_key, file_path):
+                all_successful = False
+        
+        return all_successful
+    
+    def add_comment_with_attachments(
+        self, 
+        issue_key: str, 
+        comment_text: str, 
+        file_paths: List[str]
+    ) -> bool:
+        """
+        Add a comment and upload attachments to a JIRA issue.
+        
+        Args:
+            issue_key: JIRA issue key (e.g., PROJ-123)
+            comment_text: Comment text to add
+            file_paths: List of file paths to upload
+            
+        Returns:
+            True if both operations successful, False otherwise
+        """
+        comment_success = self.add_comment(issue_key, comment_text)
+        attachments_success = self.upload_attachments(issue_key, file_paths)
+        
+        return comment_success and attachments_success
+    
+    def _validate_file_path(self, file_path: str) -> bool:
+        """Validate that file exists and is readable."""
+        path = Path(file_path)
+        
+        if not path.exists():
+            print(f"Error: File does not exist - {file_path}")
+            return False
+        
+        if not path.is_file():
+            print(f"Error: Path is not a file - {file_path}")
+            return False
+        
+        if not os.access(file_path, os.R_OK):
+            print(f"Error: File is not readable - {file_path}")
+            return False
+        
+        return True
+    
+    def _handle_http_error(self, response, issue_key: str, error: Exception):
+        """Handle HTTP errors with appropriate messages."""
+        if response.status_code == 404:
+            print(f"Error: Issue '{issue_key}' not found")
+        elif response.status_code == 401:
+            print("Error: Authentication failed. Check your credentials.")
+        elif response.status_code == 413:
+            print("Error: File too large. Check JIRA's attachment size limits.")
+        else:
+            print(f"Error: HTTP {response.status_code} - {error}")
 
 
 def format_issue_details(issue_data: dict) -> str:
@@ -179,41 +302,94 @@ def load_credentials():
     return jira_url, jira_user, jira_token
 
 
+def parse_arguments() -> dict:
+    """Parse command line arguments into structured format."""
+    if len(sys.argv) < 2:
+        return {'mode': 'help'}
+    
+    issue_key = sys.argv[1]
+    args = sys.argv[2:]
+    
+    if not args:
+        return {'mode': 'read', 'issue_key': issue_key}
+    
+    parsed = {'mode': 'update', 'issue_key': issue_key}
+    
+    if '--attach' in args:
+        attach_index = args.index('--attach')
+        
+        if '--comment' in args:
+            comment_index = args.index('--comment')
+            
+            if comment_index < attach_index:
+                comment_parts = args[comment_index + 1:attach_index]
+                parsed['comment'] = ' '.join(comment_parts)
+                parsed['files'] = args[attach_index + 1:]
+            else:
+                parsed['files'] = args[attach_index + 1:comment_index]
+                comment_parts = args[comment_index + 1:]
+                parsed['comment'] = ' '.join(comment_parts)
+        else:
+            parsed['files'] = args[attach_index + 1:]
+    else:
+        parsed['comment'] = ' '.join(args)
+    
+    return parsed
+
+
+def execute_read_mode(client: JiraClient, issue_key: str) -> bool:
+    """Execute read mode to fetch and display issue details."""
+    print(f"Fetching details for {issue_key}...")
+    issue_data = client.get_issue(issue_key)
+    
+    if issue_data:
+        print(format_issue_details(issue_data))
+        return True
+    return False
+
+
+def execute_update_mode(client: JiraClient, issue_key: str, parsed_args: dict) -> bool:
+    """Execute update mode to add comments and/or attachments."""
+    has_comment = 'comment' in parsed_args
+    has_files = 'files' in parsed_args
+    
+    if has_comment and has_files:
+        print(f"Adding comment and attachments to {issue_key}...")
+        return client.add_comment_with_attachments(
+            issue_key, 
+            parsed_args['comment'], 
+            parsed_args['files']
+        )
+    elif has_comment:
+        print(f"Adding comment to {issue_key}...")
+        return client.add_comment(issue_key, parsed_args['comment'])
+    elif has_files:
+        print(f"Uploading attachments to {issue_key}...")
+        return client.upload_attachments(issue_key, parsed_args['files'])
+    else:
+        print("Error: No comment or attachments specified")
+        return False
+
+
 def main():
     """Main entry point for the script."""
-    if len(sys.argv) < 2:
+    parsed_args = parse_arguments()
+    
+    if parsed_args['mode'] == 'help':
         print(__doc__)
         sys.exit(1)
     
-    issue_key = sys.argv[1]
-    
-    # Load credentials
     jira_url, jira_user, jira_token = load_credentials()
-    
-    # Create JIRA client
     client = JiraClient(jira_url, jira_user, jira_token)
     
-    if len(sys.argv) == 2:
-        # Read mode: Get issue details
-        print(f"Fetching details for {issue_key}...")
-        issue_data = client.get_issue(issue_key)
-        
-        if issue_data:
-            print(format_issue_details(issue_data))
-        else:
-            sys.exit(1)
+    issue_key = parsed_args['issue_key']
     
-    elif len(sys.argv) >= 3:
-        # Update mode: Add comment
-        comment_text = ' '.join(sys.argv[2:])
-        print(f"Adding comment to {issue_key}...")
-        
-        success = client.add_comment(issue_key, comment_text)
-        if not success:
-            sys.exit(1)
-    
+    if parsed_args['mode'] == 'read':
+        success = execute_read_mode(client, issue_key)
     else:
-        print(__doc__)
+        success = execute_update_mode(client, issue_key, parsed_args)
+    
+    if not success:
         sys.exit(1)
 
 

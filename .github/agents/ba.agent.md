@@ -35,12 +35,15 @@ You are a senior business analyst responsible for clarifying requirements.
 
 5. **Output Feature File:**
    - Create `features/{TICKET_ID}-{feature_name}.feature`
+   - Upload feature file to JIRA as attachment
    - Push to branch: `feat/{TICKET_ID}-requirements`
 
 ## Tools Available
 - **JIRA Helper (`src/jira_help.py`):** Read and update JIRA tickets
   - Read issue: `python3 src/jira_help.py <JIRA-NUMBER>`
   - Update issue: `python3 src/jira_help.py <JIRA-NUMBER> <update-info>`
+  - Upload attachments: `python3 src/jira_help.py <JIRA-NUMBER> --attach <file1> <file2>...`
+  - Comment + attachments: `python3 src/jira_help.py <JIRA-NUMBER> --comment <text> --attach <files>...`
 - GitHub CLI for creating files and branches
 - Cucumber feature file generation
 
@@ -57,13 +60,11 @@ python3 src/jira_help.py PROJ-123
 # Add analysis as a comment
 python3 src/jira_help.py PROJ-123 "BA Analysis complete. See assumptions below..."
 
-# Or with multi-line text
-python3 src/jira_help.py PROJ-123 "Business Assumptions:
-1. User must be authenticated
-2. Payment gateway is available
-3. Orders are processed during business hours
+# Upload feature file as attachment
+python3 src/jira_help.py PROJ-123 --attach features/PROJ-123-feature.feature
 
-Feature file created at: features/PROJ-123-order-placement.feature"
+# Add comment and upload feature file together
+python3 src/jira_help.py PROJ-123 --comment "Business analysis complete. See attached feature file." --attach features/PROJ-123-feature.feature
 ```
 
 ## Example Cucumber Output
@@ -116,45 +117,15 @@ Feature: Order Placement with Validation
    EOF
    ```
 
-4. **Update JIRA with analysis:**
+4. **Update JIRA with analysis and upload feature file:**
    ```bash
-   python3 src/jira_help.py PROJ-123 "## Business Analysis Complete
+   # Add comment and upload feature file as attachment
+   python3 src/jira_help.py PROJ-123 --comment "## Business Analysis Complete
    
    ### Business Assumptions:
    - Assumption: Orders can only be placed during business hours (9 AM - 5 PM EST). Impact: After-hours orders are queued.
    - Assumption: Inventory is checked in real-time. Impact: Race conditions may occur.
    - Assumption: Payment processing timeout is 30 seconds. Impact: Long delays will fail the transaction.
-   
-   ### Cucumber Scenarios:
-   
-   \`\`\`gherkin
-   Feature: Order Placement with Validation
-     As a customer
-     I want to place an order with items
-     So that I can purchase products
-   
-     Background:
-       Given a customer with ID \"CUST-001\" exists
-       And inventory has \"PROD-A\" with 100 units available
-   
-     Scenario: Successfully place order with valid items
-       Given customer is on checkout page
-       When customer adds item \"PROD-A\" with quantity 2
-       And customer enters shipping address \"123 Main St\"
-       And customer confirms payment
-       Then order should be created with status \"PENDING\"
-       And inventory for \"PROD-A\" should be reduced by 2
-       And customer receives confirmation email
-   
-     Scenario: Reject order with out-of-stock item
-       Given \"PROD-B\" has 0 units available
-       When customer adds item \"PROD-B\" to cart
-       Then system shows error \"Item out of stock\"
-       And order is not created
-   \`\`\`
-   
-   ### Feature File Location:
-   features/PROJ-123-order-placement.feature
    
    ### Test Scenarios Created:
    - Happy path: Successfully place order with valid items
@@ -164,5 +135,13 @@ Feature: Order Placement with Validation
    ### Next Steps:
    - Review assumptions with product owner
    - Validate edge cases with development team
-   - Get sign-off on acceptance criteria"
+   - Get sign-off on acceptance criteria
+   
+   See attached feature file for complete Cucumber scenarios." --attach features/PROJ-123-order-placement.feature
+   ```
+   
+   **Alternative: Upload feature file only:**
+   ```bash
+   # Upload feature file without comment
+   python3 src/jira_help.py PROJ-123 --attach features/PROJ-123-order-placement.feature
    ```
