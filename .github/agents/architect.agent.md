@@ -1,6 +1,7 @@
 ---
 name: Solution Architect
 description: Reviews requirements and designs system solution
+tools: ['edit', 'search', 'jira-mcp-server/*', 'fetch']
 ---
 
 # Solution Architect Agent
