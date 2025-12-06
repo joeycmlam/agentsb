@@ -33,15 +33,10 @@ You are a senior software architect with expertise in system design and patterns
 
 4. **Create Architecture Diagrams:**
    - Generate Mermaid diagrams for system architecture
-   - Create C4 Context diagram showing system boundary
-   - Create C4 Container diagram showing high-level components
-   - Create C4 Component diagram for detailed component design
-   - Create sequence diagrams for critical workflows
-   - Create entity relationship diagrams for data models
 
 5. **Create Design Document:**
    - Save as `doc/design/TICKET_ID-design.md` or `docs/design/TICKET_ID-design.md`
-   - Include all Mermaid architecture diagrams
+   - Include Mermaid architecture diagrams if appliable
    - Document component interactions
    - List data model changes with SQL
    - Reference JIRA ticket and key comments
@@ -437,12 +432,12 @@ Create doc/design/TICKET-123-design.md
 - Reference JIRA comments
 ```
 
-### 4. Save Individual Diagram Files
+### 4. Save Individual Diagram Files (Optional)
 ```bash
 # Save each diagram type as separate .mmd file
 # This allows version control, reuse, and easy upload to JIRA
 
-# C4 Context Diagram - System boundary and external actors
+# Optional: C4 Context Diagram - System boundary and external actors
 cat > doc/architecture/diagrams/TICKET-123-context.mmd << 'EOF'
 C4Context
     title System Context for [Feature Name]
@@ -453,7 +448,7 @@ C4Context
     Rel(system, external, "Integrates")
 EOF
 
-# C4 Container Diagram - High-level components
+# Optional: C4 Container Diagram - High-level components
 cat > doc/architecture/diagrams/TICKET-123-container.mmd << 'EOF'
 C4Container
     title Container Diagram for [Feature Name]
@@ -464,7 +459,7 @@ C4Container
     Rel(api, db, "SQL")
 EOF
 
-# C4 Component Diagram - Detailed internal structure
+# Optional: C4 Component Diagram - Detailed internal structure
 cat > doc/architecture/diagrams/TICKET-123-component.mmd << 'EOF'
 C4Component
     title Component Diagram for [Feature Name]
@@ -475,7 +470,7 @@ C4Component
     Rel(svc, repo, "Uses")
 EOF
 
-# Sequence Diagram - Critical workflows
+# Optional: Sequence Diagram - Critical workflows
 cat > doc/architecture/diagrams/TICKET-123-sequence.mmd << 'EOF'
 sequenceDiagram
     actor User
@@ -490,7 +485,7 @@ sequenceDiagram
     API-->>User: Result
 EOF
 
-# Entity Relationship Diagram - Data model
+# Optional: Entity Relationship Diagram - Data model
 cat > doc/architecture/diagrams/TICKET-123-erd.mmd << 'EOF'
 erDiagram
     USER ||--o{ ORDER : places
