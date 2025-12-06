@@ -3,6 +3,7 @@
 JIRA Helper Script
 Usage:
     python3 jira_help.py [JIRA-NUMBER]                              # Get JIRA issue details
+    python3 jira_help.py [JIRA-NUMBER] --download                   # Get issue details and download attachments
     python3 jira_help.py [JIRA-NUMBER] [comment-text]               # Add comment to JIRA issue
     python3 jira_help.py [JIRA-NUMBER] --attach [file1] [file2]...  # Upload attachments
     python3 jira_help.py [JIRA-NUMBER] --comment [text] --attach [files]... # Comment + attachments
@@ -12,7 +13,7 @@ import sys
 import os
 import json
 import requests
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from pathlib import Path
 
 
@@ -226,6 +227,77 @@ class JiraClient:
         
         return True
     
+    def download_attachment(self, url: str, filename: str, download_dir: Path) -> bool:
+        """
+        Download a single attachment from JIRA.
+        
+        Args:
+            url: Attachment download URL
+            filename: Name to save the file as
+            download_dir: Directory to save the attachment
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            download_dir.mkdir(parents=True, exist_ok=True)
+            
+            response = requests.get(
+                url,
+                auth=self.auth,
+                timeout=60,
+                stream=True
+            )
+            response.raise_for_status()
+            
+            file_path = download_dir / filename
+            with open(file_path, 'wb') as file:
+                for chunk in response.iter_content(chunk_size=8192):
+                    file.write(chunk)
+            
+            print(f"✓ Downloaded '{filename}' to {download_dir}")
+            return True
+            
+        except requests.exceptions.RequestException as e:
+            print(f"Error: Failed to download '{filename}' - {e}")
+            return False
+        except OSError as e:
+            print(f"Error: Failed to save '{filename}' - {e}")
+            return False
+    
+    def download_issue_attachments(self, issue_key: str, download_dir: Path) -> Tuple[int, int]:
+        """
+        Download all attachments from a JIRA issue.
+        
+        Args:
+            issue_key: JIRA issue key (e.g., PROJ-123)
+            download_dir: Directory to save attachments
+            
+        Returns:
+            Tuple of (successful_downloads, total_attachments)
+        """
+        issue_data = self.get_issue(issue_key)
+        if not issue_data:
+            return (0, 0)
+        
+        attachments = issue_data.get('fields', {}).get('attachment', [])
+        if not attachments:
+            print(f"No attachments found for {issue_key}")
+            return (0, 0)
+        
+        print(f"Downloading {len(attachments)} attachment(s) for {issue_key}...")
+        
+        successful = 0
+        for attachment in attachments:
+            filename = attachment.get('filename')
+            url = attachment.get('content')
+            
+            if filename and url:
+                if self.download_attachment(url, filename, download_dir):
+                    successful += 1
+        
+        return (successful, len(attachments))
+    
     def _handle_http_error(self, response, issue_key: str, error: Exception):
         """Handle HTTP errors with appropriate messages."""
         if response.status_code == 404:
@@ -253,6 +325,7 @@ def format_issue_details(issue_data: dict) -> str:
     created = fields.get('created', 'N/A')
     updated = fields.get('updated', 'N/A')
     description = fields.get('description', {})
+    attachments = fields.get('attachment', [])
     
     # Extract description text
     desc_text = 'N/A'
@@ -266,6 +339,9 @@ def format_issue_details(issue_data: dict) -> str:
                         desc_parts.append(para_content.get('text', ''))
         if desc_parts:
             desc_text = '\n    '.join(desc_parts)
+    
+    # Format attachments
+    attachments_text = _format_attachments_list(attachments)
     
     # Format output
     output = f"""
@@ -283,9 +359,26 @@ Updated:     {updated}
 
 Description:
     {desc_text}
+
+{attachments_text}
 {'='*60}
 """
     return output
+
+
+def _format_attachments_list(attachments: List[dict]) -> str:
+    """Format attachments list for display."""
+    if not attachments:
+        return "Attachments: None"
+    
+    lines = [f"Attachments: ({len(attachments)})"]
+    for attachment in attachments:
+        filename = attachment.get('filename', 'Unknown')
+        size = attachment.get('size', 0)
+        size_kb = size / 1024 if size else 0
+        lines.append(f"    - {filename} ({size_kb:.1f} KB)")
+    
+    return '\n'.join(lines)
 
 
 def load_credentials():
@@ -313,6 +406,13 @@ def parse_arguments() -> dict:
     if not args:
         return {'mode': 'read', 'issue_key': issue_key}
     
+    if '--download' in args:
+        return {
+            'mode': 'read', 
+            'issue_key': issue_key, 
+            'download': True
+        }
+    
     parsed = {'mode': 'update', 'issue_key': issue_key}
     
     if '--attach' in args:
@@ -337,15 +437,33 @@ def parse_arguments() -> dict:
     return parsed
 
 
-def execute_read_mode(client: JiraClient, issue_key: str) -> bool:
+def execute_read_mode(client: JiraClient, issue_key: str, download: bool = False) -> bool:
     """Execute read mode to fetch and display issue details."""
     print(f"Fetching details for {issue_key}...")
     issue_data = client.get_issue(issue_key)
     
-    if issue_data:
-        print(format_issue_details(issue_data))
-        return True
-    return False
+    if not issue_data:
+        return False
+    
+    print(format_issue_details(issue_data))
+    
+    if download:
+        download_dir = _create_download_directory(issue_key)
+        successful, total = client.download_issue_attachments(issue_key, download_dir)
+        
+        if total > 0:
+            print(f"\nDownload summary: {successful}/{total} attachments downloaded")
+        
+        return successful == total if total > 0 else True
+    
+    return True
+
+
+def _create_download_directory(issue_key: str) -> Path:
+    """Create and return download directory for issue attachments."""
+    download_dir = Path.cwd() / 'downloads' / issue_key
+    download_dir.mkdir(parents=True, exist_ok=True)
+    return download_dir
 
 
 def execute_update_mode(client: JiraClient, issue_key: str, parsed_args: dict) -> bool:
@@ -385,7 +503,8 @@ def main():
     issue_key = parsed_args['issue_key']
     
     if parsed_args['mode'] == 'read':
-        success = execute_read_mode(client, issue_key)
+        download = parsed_args.get('download', False)
+        success = execute_read_mode(client, issue_key, download)
     else:
         success = execute_update_mode(client, issue_key, parsed_args)
     
