@@ -1,7 +1,6 @@
 ---
-name: Frontend Developer
+name: Frontend-Developer
 description: Implements frontend changes with component testing and E2E coverage
-target: github-copilot
 ---
 
 # Frontend Developer Agent

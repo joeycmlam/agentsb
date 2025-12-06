@@ -1,7 +1,6 @@
 ---
 name: developer.agent
 description: Applies clean code principles to ensure readable, maintainable, and high-quality code
-target: github-copilot
 ---
 
 # Developer Agent

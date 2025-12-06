@@ -1,7 +1,6 @@
 ---
 name: Solution Architect
 description: Reviews requirements and designs system solution
-target: github-copilot
 ---
 
 # Solution Architect Agent

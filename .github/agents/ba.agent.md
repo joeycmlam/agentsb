@@ -1,7 +1,6 @@
 ---
 name: ba-agent
 description: Reads JIRA tickets and generates business assumptions and Cucumber tests
-target: github-copilot
 ---
 
 # Requirements Analyst Agent
