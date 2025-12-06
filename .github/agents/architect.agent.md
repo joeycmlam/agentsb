@@ -867,10 +867,6 @@ git log -1
    - Input: `jql` query, optional `max_results`
    - Returns: list of matching issues
 
-### Natural Language Interaction
-
-The power of MCP integration is natural language interaction:
-
 ```
 You: "Create architecture design for PROJ-456 including all diagrams and upload to JIRA"
 
@@ -887,29 +883,6 @@ AI Agent automatically:
 10. Confirms completion
 ```
 
-## Viewing and Editing Mermaid Diagrams
-
-### VS Code Extensions
-- **Mermaid Preview**: View diagrams in editor
-- **Mermaid Markdown Syntax**: Syntax highlighting
-- **Markdown Preview Mermaid**: Preview in markdown
-
-### Online Tools
-- **Mermaid Live Editor**: https://mermaid.live
-- **JIRA Cloud**: May render Mermaid in code blocks (depends on instance)
-
-### CLI Tools
-```bash
-# Install mermaid-cli for PNG export (optional)
-npm install -g @mermaid-js/mermaid-cli
-
-# Convert .mmd to PNG
-mmdc -i diagram.mmd -o diagram.png
-
-# Upload PNG to JIRA
-jira_upload_attachment(issue_key="TICKET-123", file_path="diagram.png")
-```
-
 ## Best Practices
 
 1. **Always read comments** - Critical design decisions often hide in comment threads
@@ -923,24 +896,3 @@ jira_upload_attachment(issue_key="TICKET-123", file_path="diagram.png")
 9. **Link GitHub branch in JIRA** - Easy access to complete design
 10. **Request explicit review** - Tag stakeholders for feedback
 
-## Troubleshooting
-
-### MCP Server Not Available
-- **Check**: View → Output → Select "MCP" in VS Code
-- **Fix**: Restart VS Code completely
-- **Verify**: Test with simple jira_get_issue call
-
-### Diagram Upload Fails
-- **Check**: Verify file exists and path is correct
-- **Check**: Ensure file size is within JIRA limits
-- **Retry**: May be temporary network issue
-
-### Branch Push Fails
-- **Check**: Verify you have write access to repository
-- **Check**: Ensure branch name doesn't conflict
-- **Fix**: Pull latest changes first
-
-### Comments Not Appearing
-- **Check**: Verify JIRA permissions
-- **Delay**: May take a few seconds to appear
-- **Refresh**: Reload JIRA ticket in browser

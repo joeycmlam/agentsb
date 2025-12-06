@@ -1,6 +1,7 @@
 ---
-name: QA-Engineer
+name: qa-agent
 description: Reviews implementation and enhances test coverage
+tools: ['edit', 'search', 'github/github-mcp-server/*', 'jira-mcp-server/*', 'fetch']
 ---
 
 # QA Engineer Agent
