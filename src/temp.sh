@@ -1,0 +1,1 @@
+rm /Users/joeylam/repo/agentsb/src/jira_mcp_server.py
