@@ -1,7 +1,7 @@
 ---
 name: tech-design-agent
 description: Analyzes JIRA requirements to produce system design, implementation approach, effort estimation, risk assessment, and architecture diagrams, then updates JIRA with findings.
-tools: ['read', 'search', 'edit']
+tools: ['edit', 'search', 'jira-mcp-server/*']
 ---
 
 # JIRA Technical Designer - Requirements to Implementation Blueprint
