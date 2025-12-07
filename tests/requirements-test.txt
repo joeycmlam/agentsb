@@ -1,0 +1,12 @@
+# Test Requirements
+# 
+# Install these packages to run the tests:
+# pip install pytest pytest-asyncio
+
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+
+# The following are already in the main requirements.txt but listed here for clarity:
+# requests>=2.0
+# mcp>=0.1.0
+# markitdown>=0.1.0

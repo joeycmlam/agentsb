@@ -10,9 +10,15 @@ Supports: PDF, Word, Excel, PowerPoint, images, HTML, and more.
 """
 
 import io
+import os
 import asyncio
+import logging
+import functools
 from typing import Optional, Union, BinaryIO
 from pathlib import Path
+from dataclasses import dataclass
+
+from mime_utils import get_mime_detector
 
 
 # Try to import markitdown with graceful fallback
@@ -21,6 +27,33 @@ try:
     MARKITDOWN_AVAILABLE = True
 except ImportError:
     MARKITDOWN_AVAILABLE = False
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ConverterConfig:
+    """Configuration for DocumentConverter."""
+    max_file_size_mb: int = int(os.getenv('MAX_DOCUMENT_SIZE_MB', '50'))
+    timeout_seconds: int = int(os.getenv('DOCUMENT_CONVERSION_TIMEOUT', '30'))
+    enable_detailed_logging: bool = os.getenv('DOCUMENT_CONVERTER_DEBUG', '').lower() == 'true'
+
+
+def async_wrapper(func):
+    """
+    Decorator to wrap synchronous methods with async executor.
+    
+    Reduces code duplication for async wrapper methods.
+    """
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None, 
+            lambda: func(*args, **kwargs)
+        )
+    return wrapper
 
 
 class DocumentConverter:
@@ -31,39 +64,25 @@ class DocumentConverter:
     images, HTML, and more.
     """
     
-    # MIME types supported by markitdown
-    SUPPORTED_MIME_TYPES = {
-        'application/pdf',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',  # .docx
-        'application/msword',  # .doc
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',  # .xlsx
-        'application/vnd.ms-excel',  # .xls
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation',  # .pptx
-        'application/vnd.ms-powerpoint',  # .ppt
-        'text/html',
-        'text/csv',
-        'application/json',
-        'application/xml',
-        'text/xml',
-        'image/jpeg',
-        'image/png',
-        'image/bmp',
-        'image/tiff',
-        'audio/wav',
-        'audio/mpeg',  # .mp3
-        'application/zip',
-        'application/epub+zip',
-    }
-    
-    # File size limit (50MB)
-    MAX_FILE_SIZE = 50 * 1024 * 1024
-    
-    def __init__(self):
-        """Initialize the document converter."""
+    def __init__(self, config: ConverterConfig = ConverterConfig()):
+        """
+        Initialize the document converter.
+        
+        Args:
+            config: Configuration object for converter behavior
+        """
+        self.config = config
+        self.mime_detector = get_mime_detector()
+        
+        # File size limit in bytes
+        self.max_file_size = config.max_file_size_mb * 1024 * 1024
+        
         if MARKITDOWN_AVAILABLE:
             self._converter = MarkItDown()
+            logger.info("DocumentConverter initialized with MarkItDown support")
         else:
             self._converter = None
+            logger.warning("DocumentConverter initialized without MarkItDown (install with: pip install markitdown)")
     
     def is_available(self) -> bool:
         """Check if markitdown is available."""
@@ -82,11 +101,10 @@ class DocumentConverter:
         if not self.is_available():
             return False
         
-        # Check exact match or base type (e.g., 'text/*')
-        return mime_type in self.SUPPORTED_MIME_TYPES or \
-               mime_type.split('/')[0] in ['text', 'image']
+        return self.mime_detector.is_supported(mime_type)
     
-    async def convert_to_markdown_async(
+    @async_wrapper
+    def convert_to_markdown_async(
         self,
         file_stream: Union[BinaryIO, bytes],
         mime_type: str,
@@ -108,11 +126,7 @@ class DocumentConverter:
                 - filename: Original filename (if provided)
                 - success: Boolean indicating conversion success
         """
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None,
-            lambda: self.convert_to_markdown(file_stream, mime_type, filename)
-        )
+        return self.convert_to_markdown(file_stream, mime_type, filename)
     
     def convert_to_markdown(
         self,
@@ -167,13 +181,19 @@ class DocumentConverter:
             file_size = file_stream.tell()
             file_stream.seek(current_pos)
             
-            if file_size > self.MAX_FILE_SIZE:
-                result["error"] = (
+            if file_size > self.max_file_size:
+                error_msg = (
                     f"File too large ({file_size / 1024 / 1024:.1f}MB). "
-                    f"Maximum size: {self.MAX_FILE_SIZE / 1024 / 1024}MB"
+                    f"Maximum size: {self.max_file_size / 1024 / 1024}MB"
                 )
+                logger.warning(f"File size limit exceeded for {filename}: {error_msg}")
+                result["error"] = error_msg
                 result["success"] = False
                 return result
+            
+            # Log conversion start
+            if self.config.enable_detailed_logging:
+                logger.debug(f"Starting conversion of {filename} ({mime_type}, {file_size} bytes)")
             
             # Perform conversion
             conversion_result = self._converter.convert(file_stream)
@@ -183,13 +203,24 @@ class DocumentConverter:
             result["success"] = True
             result["size_bytes"] = file_size
             
+            # Log successful conversion
+            logger.info(f"Successfully converted {filename} to markdown ({len(result['markdown'])} chars)")
+            
+        except ImportError as e:
+            error_msg = f"Missing dependency for {mime_type}: {str(e)}"
+            logger.error(f"Import error during conversion of {filename}: {e}", exc_info=True)
+            result["error"] = error_msg
+            result["success"] = False
         except Exception as e:
-            result["error"] = f"Conversion failed: {str(e)}"
+            error_msg = f"Conversion failed: {str(e)}"
+            logger.error(f"Unexpected error converting {filename}: {e}", exc_info=True)
+            result["error"] = error_msg
             result["success"] = False
         
         return result
     
-    async def convert_file_async(self, file_path: str) -> dict:
+    @async_wrapper
+    def convert_file_async(self, file_path: str) -> dict:
         """
         Async version: Convert a local file to markdown.
         
@@ -199,11 +230,7 @@ class DocumentConverter:
         Returns:
             Dictionary with conversion result
         """
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None,
-            lambda: self.convert_file(file_path)
-        )
+        return self.convert_file(file_path)
     
     def convert_file(self, file_path: str) -> dict:
         """
@@ -233,56 +260,53 @@ class DocumentConverter:
             }
         
         # Detect MIME type from extension
-        mime_type = self._detect_mime_type(path.suffix.lower())
+        mime_type = self.mime_detector.detect_from_extension(path.suffix.lower())
+        
+        logger.debug(f"Detected MIME type {mime_type} for file {file_path}")
         
         try:
+            # Check file size before opening
+            file_size = path.stat().st_size
+            if file_size > self.max_file_size:
+                error_msg = (
+                    f"File too large ({file_size / 1024 / 1024:.1f}MB). "
+                    f"Maximum size: {self.max_file_size / 1024 / 1024}MB"
+                )
+                logger.warning(f"File size check failed for {file_path}: {error_msg}")
+                return {
+                    "error": error_msg,
+                    "success": False,
+                    "filename": path.name
+                }
+            
             with open(file_path, 'rb') as f:
                 return self.convert_to_markdown(f, mime_type, path.name)
-        except Exception as e:
+        except PermissionError as e:
+            error_msg = f"Permission denied: {str(e)}"
+            logger.error(f"Permission error reading {file_path}: {e}")
             return {
-                "error": f"Failed to read file: {str(e)}",
+                "error": error_msg,
+                "success": False,
+                "filename": path.name
+            }
+        except FileNotFoundError as e:
+            error_msg = f"File not found: {str(e)}"
+            logger.error(f"File not found: {file_path}")
+            return {
+                "error": error_msg,
+                "success": False,
+                "filename": path.name
+            }
+        except Exception as e:
+            error_msg = f"Failed to read file: {str(e)}"
+            logger.error(f"Unexpected error reading {file_path}: {e}", exc_info=True)
+            return {
+                "error": error_msg,
                 "success": False,
                 "filename": path.name
             }
     
-    def _detect_mime_type(self, extension: str) -> str:
-        """
-        Detect MIME type from file extension.
-        
-        Args:
-            extension: File extension (e.g., '.pdf', '.docx')
-        
-        Returns:
-            MIME type string
-        """
-        mime_map = {
-            '.pdf': 'application/pdf',
-            '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            '.doc': 'application/msword',
-            '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            '.xls': 'application/vnd.ms-excel',
-            '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-            '.ppt': 'application/vnd.ms-powerpoint',
-            '.html': 'text/html',
-            '.htm': 'text/html',
-            '.csv': 'text/csv',
-            '.json': 'application/json',
-            '.xml': 'application/xml',
-            '.jpg': 'image/jpeg',
-            '.jpeg': 'image/jpeg',
-            '.png': 'image/png',
-            '.bmp': 'image/bmp',
-            '.tiff': 'image/tiff',
-            '.tif': 'image/tiff',
-            '.wav': 'audio/wav',
-            '.mp3': 'audio/mpeg',
-            '.zip': 'application/zip',
-            '.epub': 'application/epub+zip',
-            '.txt': 'text/plain',
-            '.md': 'text/markdown',
-        }
-        
-        return mime_map.get(extension, 'application/octet-stream')
+
     
     def get_supported_formats(self) -> list[str]:
         """
@@ -293,7 +317,7 @@ class DocumentConverter:
         """
         if not self.is_available():
             return []
-        return sorted(self.SUPPORTED_MIME_TYPES)
+        return sorted(self.mime_detector.get_supported_formats())
     
     def get_supported_extensions(self) -> list[str]:
         """
@@ -305,12 +329,7 @@ class DocumentConverter:
         if not self.is_available():
             return []
         
-        return [
-            '.pdf', '.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt',
-            '.html', '.htm', '.csv', '.json', '.xml',
-            '.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif',
-            '.wav', '.mp3', '.zip', '.epub', '.txt', '.md'
-        ]
+        return self.mime_detector.get_supported_extensions()
 
 
 # Global singleton instance
