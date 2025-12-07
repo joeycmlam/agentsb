@@ -2,7 +2,7 @@
 """
 MCP Server Module
 
-Model Context Protocol server for JIRA operations.
+Model Context Protocol server for JIRA operations and document reading.
 """
 
 import json
@@ -14,14 +14,16 @@ from mcp.types import Tool, TextContent
 from mcp.server.stdio import stdio_server
 
 from jira_client import JiraClientAsync
+from document_converter import get_converter
 
 
 class JiraMcpServer:
-    """MCP Server for JIRA operations."""
+    """MCP Server for JIRA operations and document reading."""
 
     def __init__(self):
         self.server = Server("jira-mcp-server")
         self.jira_client: Optional[JiraClientAsync] = None
+        self.doc_converter = get_converter()
         self._register_handlers()
 
     def _register_handlers(self) -> None:
@@ -30,7 +32,7 @@ class JiraMcpServer:
         self.server.call_tool()(self._handle_call_tool)
 
     async def _handle_list_tools(self) -> list[Tool]:
-        """Return list of available JIRA tools."""
+        """Return list of available JIRA and document reading tools."""
         return [
             Tool(
                 name="jira_get_issue",
@@ -120,6 +122,28 @@ class JiraMcpServer:
                 }
             ),
             Tool(
+                name="jira_read_attachment_content",
+                description="Download and convert JIRA attachment (PDF, Word, Excel, etc.) to markdown for reading",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "issue_key": {
+                            "type": "string",
+                            "description": "JIRA issue key (e.g., PROJ-123)"
+                        },
+                        "filename": {
+                            "type": "string",
+                            "description": "Attachment filename to read"
+                        },
+                        "attachment_id": {
+                            "type": "string",
+                            "description": "Optional attachment ID for disambiguation if multiple files have the same name"
+                        }
+                    },
+                    "required": ["issue_key", "filename"]
+                }
+            ),
+            Tool(
                 name="jira_search_issues",
                 description="Search for JIRA issues using JQL (JIRA Query Language)",
                 inputSchema={
@@ -137,12 +161,26 @@ class JiraMcpServer:
                     },
                     "required": ["jql"]
                 }
+            ),
+            Tool(
+                name="read_file",
+                description="Read and convert local files (PDF, Word, Excel, PowerPoint, images, etc.) to markdown. Supports various document formats for AI agents to consume.",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "file_path": {
+                            "type": "string",
+                            "description": "Path to the file to read and convert to markdown"
+                        }
+                    },
+                    "required": ["file_path"]
+                }
             )
         ]
 
     async def _handle_call_tool(self, name: str, arguments: Any) -> list[TextContent]:
         """Handle tool invocation requests."""
-        if not self.jira_client:
+        if not self.jira_client and name.startswith("jira_"):
             self._initialize_jira_client()
 
         handlers = {
@@ -151,7 +189,9 @@ class JiraMcpServer:
             "jira_add_comment": self._tool_add_comment,
             "jira_upload_attachment": self._tool_upload_attachment,
             "jira_download_attachments": self._tool_download_attachments,
-            "jira_search_issues": self._tool_search_issues
+            "jira_read_attachment_content": self._tool_read_attachment_content,
+            "jira_search_issues": self._tool_search_issues,
+            "read_file": self._tool_read_file
         }
 
         handler = handlers.get(name)
@@ -237,6 +277,20 @@ class JiraMcpServer:
             **result
         }
 
+    async def _tool_read_attachment_content(self, arguments: dict) -> dict:
+        """Read and convert JIRA attachment to markdown."""
+        issue_key = arguments["issue_key"]
+        filename = arguments["filename"]
+        attachment_id = arguments.get("attachment_id")
+
+        result = await self.jira_client.read_attachment_content(
+            issue_key,
+            filename,
+            attachment_id
+        )
+
+        return result
+
     async def _tool_search_issues(self, arguments: dict) -> dict:
         """Search JIRA issues using JQL."""
         jql = arguments["jql"]
@@ -253,6 +307,14 @@ class JiraMcpServer:
             "max_results": max_results,
             "issues": issues
         }
+
+    async def _tool_read_file(self, arguments: dict) -> dict:
+        """Read and convert local file to markdown."""
+        file_path = arguments["file_path"]
+
+        result = await self.doc_converter.convert_file_async(file_path)
+
+        return result
 
     def _format_issue_response(self, issue_data: dict) -> dict:
         """Format issue data for response."""

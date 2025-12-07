@@ -8,10 +8,13 @@ Async JIRA API client for MCP server operations.
 import os
 import json
 import asyncio
+import io
 from typing import Any, Optional
 from pathlib import Path
 
 import requests
+
+from document_converter import get_converter
 
 CONTENT_TYPE_JSON = 'application/json'
 DEFAULT_TIMEOUT = 30
@@ -31,6 +34,7 @@ class JiraClientAsync:
             'Accept': CONTENT_TYPE_JSON,
             'Content-Type': CONTENT_TYPE_JSON
         }
+        self.doc_converter = get_converter()
 
     async def get_issue(self, issue_key: str) -> dict:
         """Retrieve JIRA issue details."""
@@ -165,6 +169,136 @@ class JiraClientAsync:
             'files': results,
             'directory': str(download_path)
         }
+
+    async def read_attachment_content(
+        self,
+        issue_key: str,
+        filename: str,
+        attachment_id: Optional[str] = None
+    ) -> dict:
+        """
+        Download and convert JIRA attachment (PDF, Word, Excel, etc.) to markdown for reading.
+        
+        Args:
+            issue_key: JIRA issue key (e.g., PROJ-123)
+            filename: Attachment filename to read
+            attachment_id: Optional attachment ID for disambiguation if multiple files have same name
+        
+        Returns:
+            Dictionary with:
+                - filename: Attachment filename
+                - mime_type: File MIME type
+                - size: File size in bytes
+                - issue_key: JIRA issue key
+                - markdown: Converted markdown content (if successful)
+                - error: Error message (if failed)
+                - success: Boolean indicating conversion success
+        """
+        # Get issue to retrieve attachments
+        issue_data = await self.get_issue(issue_key)
+        attachments = issue_data.get('fields', {}).get('attachment', [])
+
+        if not attachments:
+            return {
+                'error': f'No attachments found for {issue_key}',
+                'success': False,
+                'issue_key': issue_key,
+                'filename': filename
+            }
+
+        # Find matching attachment
+        target_attachment = None
+        if attachment_id:
+            # Find by ID first (most specific)
+            for att in attachments:
+                if att.get('id') == attachment_id:
+                    target_attachment = att
+                    break
+        
+        if not target_attachment:
+            # Find by filename
+            matching_attachments = [
+                att for att in attachments 
+                if att.get('filename') == filename
+            ]
+            
+            if not matching_attachments:
+                return {
+                    'error': f'Attachment "{filename}" not found in {issue_key}',
+                    'success': False,
+                    'issue_key': issue_key,
+                    'filename': filename,
+                    'available_attachments': [att.get('filename') for att in attachments]
+                }
+            
+            if len(matching_attachments) > 1 and not attachment_id:
+                return {
+                    'error': f'Multiple attachments named "{filename}" found. Please specify attachment_id.',
+                    'success': False,
+                    'issue_key': issue_key,
+                    'filename': filename,
+                    'matching_attachments': [
+                        {'id': att.get('id'), 'filename': att.get('filename'), 'created': att.get('created')}
+                        for att in matching_attachments
+                    ]
+                }
+            
+            target_attachment = matching_attachments[0]
+
+        # Download attachment content
+        download_url = target_attachment.get('content')
+        if not download_url:
+            return {
+                'error': 'No download URL available for attachment',
+                'success': False,
+                'issue_key': issue_key,
+                'filename': filename
+            }
+
+        try:
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: requests.get(
+                    download_url,
+                    auth=self.auth,
+                    timeout=UPLOAD_TIMEOUT
+                )
+            )
+
+            if not response.ok:
+                return {
+                    'error': f'Failed to download attachment: HTTP {response.status_code}',
+                    'success': False,
+                    'issue_key': issue_key,
+                    'filename': filename
+                }
+
+            # Get attachment metadata
+            mime_type = target_attachment.get('mimeType', 'application/octet-stream')
+            file_size = target_attachment.get('size', len(response.content))
+
+            # Convert to markdown using document converter
+            file_stream = io.BytesIO(response.content)
+            conversion_result = await self.doc_converter.convert_to_markdown_async(
+                file_stream,
+                mime_type,
+                filename
+            )
+
+            # Add JIRA-specific metadata
+            conversion_result['issue_key'] = issue_key
+            conversion_result['attachment_id'] = target_attachment.get('id')
+            
+            return conversion_result
+
+        except Exception as e:
+            return {
+                'error': f'Failed to read attachment: {str(e)}',
+                'success': False,
+                'issue_key': issue_key,
+                'filename': filename
+            }
 
     async def search_issues(self, jql: str, max_results: int = 50) -> dict:
         """Search for JIRA issues using JQL."""
