@@ -40,11 +40,40 @@ You are a senior business analyst responsible for clarifying requirements and cr
    - Cover scenarios illustrated in mockups and diagrams
 
 5. **Update JIRA with Complete Analysis:**
-   - Use MCP tool `jira_add_comment` to add structured comment with:
+   
+   **Decision: Update Description vs. Add Comment**
+   
+   Choose to **UPDATE ISSUE DESCRIPTION** when:
+   - Adding or refining core acceptance criteria
+   - Clarifying original requirements that are fundamental to the issue
+   - Incorporating stakeholder-approved changes to the original scope
+   - Standardizing requirement format for the entire team
+   - Information should be permanently visible in the issue summary
+   - Making the issue self-contained for future reference
+   
+   Choose to **ADD COMMENT** when:
+   - Providing analysis, assumptions, or clarifications
+   - Documenting questions that need stakeholder input
+   - Sharing test scenarios and feature file references
+   - Adding progress updates or findings from attachment analysis
+   - Information is supplementary to the original requirements
+   - Creating a discussion thread or audit trail
+   - Tagging specific stakeholders for review
+   
+   **Best Practice:** Start with comments for initial analysis. Update description only after stakeholder approval of changes to core requirements.
+   
+   **For Comments**, use MCP tool `jira_add_comment` to add structured content with:
      * Business assumptions (with references to attachments)
      * Summary of analyzed documents
      * Identified gaps and clarifications needed
      * Test scenarios overview
+   
+   **For Description Updates**, use MCP tool `jira_update_issue` to modify:
+     * Acceptance criteria section
+     * Core functional requirements
+     * Approved scope changes
+   
+   Additionally:
    - Use MCP tool `jira_upload_attachment` to upload feature file
    - Link to feature file location in GitHub if pushed
    - Tag relevant stakeholders for review
@@ -92,20 +121,25 @@ AI Agent automatically calls: jira_download_attachments(issue_key="SCRUM-123")
 Files saved to: downloads/SCRUM-123/
 ```
 
-### 3. `jira_add_comment`
-**Purpose:** Add comments to JIRA issues
+### 3. `jira_update_issue`
+**Purpose:** Update JIRA issue fields including description and summary
 **Input:**
 - `issue_key` (string): JIRA issue key
-- `comment` (string): Comment text (supports markdown)
+- `fields` (object): Fields to update (e.g., description, summary, custom fields)
 
 **Output:**
-- Confirmation of comment added with comment ID
+- Confirmation of update with updated fields
 
 **Example Usage:**
 ```
-Request: "Add comment to SCRUM-123: Business analysis complete"
-AI Agent automatically calls: jira_add_comment(issue_key="SCRUM-123", comment="Business analysis complete...")
+Request: "Update description of SCRUM-123 with refined acceptance criteria"
+AI Agent automatically calls: jira_update_issue(issue_key="SCRUM-123", fields={"description": "Updated description..."})
 ```
+**When to Use:**
+- Update core requirements after stakeholder approval
+- Refine acceptance criteria with clarifications
+- Standardize requirement format
+- Make issue self-contained with essential information
 
 ### 4. `jira_upload_attachment`
 **Purpose:** Upload files as attachments to JIRA issues
@@ -122,7 +156,9 @@ Request: "Upload feature file to SCRUM-123"
 AI Agent automatically calls: jira_upload_attachment(issue_key="SCRUM-123", file_path="features/SCRUM-123-feature.feature")
 ```
 
-### 5. `jira_search_issues`
+
+
+### 6. `jira_search_issues`
 **Purpose:** Search for issues using JQL (JIRA Query Language)
 **Input:**
 - `jql` (string): JQL query
@@ -180,8 +216,16 @@ AI Agent automatically calls: jira_search_issues(jql="assignee = currentUser() A
    ```
 
 6. **Update JIRA with comprehensive analysis:**
+   
+   **Option A: Add Comment (for analysis and findings)**
    - Ask: "Add this analysis as a comment to PROJ-123: [your analysis text]"
    - AI agent calls `jira_add_comment(issue_key="PROJ-123", comment="...")`
+   - Use for: business assumptions, clarifications needed, test scenarios overview
+   
+   **Option B: Update Description (for core requirements)**
+   - Ask: "Update PROJ-123 description with refined acceptance criteria"
+   - AI agent calls `jira_update_issue(issue_key="PROJ-123", fields={"description": "..."})`
+   - Use for: approved changes to core requirements, refined acceptance criteria
 
 7. **Upload feature file:**
    - Ask: "Upload features/PROJ-123-order-placement.feature to PROJ-123"
@@ -320,6 +364,10 @@ AI Agent:
 6. **Comprehensive scenarios** - Cover cases from both explicit requirements and visual designs
 7. **Use natural language** - The MCP integration allows you to work conversationally
 8. **Batch operations** - Create feature file first, then update JIRA with both comment and attachment
+9. **Choose the right update method:**
+   - **Use comments** for analysis, assumptions, and questions (default approach)
+   - **Update descriptions** only after stakeholder approval for core requirement changes
+   - When in doubt, use comments first to maintain traceability and enable discussion
 
 ## Advantages of MCP Integration
 

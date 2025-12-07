@@ -4,10 +4,23 @@ JIRA MCP Server
 
 A Model Context Protocol server that exposes JIRA operations as tools for AI agents.
 This server provides capabilities to interact with JIRA issues, including reading,
-commenting, and managing attachments.
+commenting, managing attachments, and updating descriptions.
+
+Supports two modes:
+1. MCP Service Mode (default): Run as MCP server for AI agents
+2. Command-Line Mode: Direct CLI operations
 
 Usage:
+    # MCP Service Mode (default)
     python3 jira_mcp_server.py
+    
+    # Command-Line Mode
+    python3 jira_mcp_server.py cli get-issue PROJ-123
+    python3 jira_mcp_server.py cli get-issue PROJ-123 --download
+    python3 jira_mcp_server.py cli add-comment PROJ-123 "comment text"
+    python3 jira_mcp_server.py cli upload-attachment PROJ-123 file.txt
+    python3 jira_mcp_server.py cli update-description PROJ-123 "new description"
+    python3 jira_mcp_server.py cli search "project = PROJ AND status = Open"
 
 Environment Variables:
     JIRA_URL - JIRA instance URL (e.g., https://your-domain.atlassian.net)
@@ -19,6 +32,7 @@ import os
 import json
 import asyncio
 import sys
+import argparse
 from typing import Any, Optional
 from pathlib import Path
 
@@ -66,6 +80,34 @@ class JiraClientAsync:
             self._raise_http_error(response, issue_key)
         
         return response.json()
+    
+    async def update_description(self, issue_key: str, description_text: str) -> dict:
+        """Update the description of a JIRA issue."""
+        endpoint = f"{self.url}/rest/api/3/issue/{issue_key}"
+        
+        payload = {
+            "fields": {
+                "description": self._create_description_payload(description_text)
+            }
+        }
+        
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: requests.put(
+                endpoint,
+                auth=self.auth,
+                headers=self.headers,
+                data=json.dumps(payload),
+                timeout=DEFAULT_TIMEOUT
+            )
+        )
+        
+        if not response.ok:
+            self._raise_http_error(response, issue_key)
+        
+        # PUT returns 204 No Content on success
+        return {"status": "success", "issue_key": issue_key}
     
     async def add_comment(self, issue_key: str, comment_text: str) -> dict:
         """Add a comment to a JIRA issue."""
@@ -180,6 +222,24 @@ class JiraClientAsync:
         
         return response.json()
     
+    def _create_description_payload(self, description_text: str) -> dict:
+        """Create description payload in Atlassian Document Format."""
+        return {
+            "type": "doc",
+            "version": 1,
+            "content": [
+                {
+                    "type": "paragraph",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": description_text
+                        }
+                    ]
+                }
+            ]
+        }
+    
     def _create_comment_payload(self, comment_text: str) -> dict:
         """Create comment payload in Atlassian Document Format."""
         return {
@@ -284,6 +344,112 @@ class JiraClientAsync:
         raise Exception(message)
 
 
+# ============================================================================
+# CLI Mode Functions
+# ============================================================================
+
+async def cli_get_issue(client: JiraClientAsync, issue_key: str, download: bool = False) -> None:
+    """CLI: Get issue details and optionally download attachments."""
+    print(f"Fetching details for {issue_key}...")
+    issue_data = await client.get_issue(issue_key)
+    
+    fields = issue_data.get('fields', {})
+    print(f"\n{'='*60}")
+    print(f"JIRA Issue: {issue_data.get('key')}")
+    print(f"{'='*60}")
+    print(f"Summary:     {fields.get('summary', 'N/A')}")
+    print(f"Type:        {fields.get('issuetype', {}).get('name', 'N/A')}")
+    print(f"Status:      {fields.get('status', {}).get('name', 'N/A')}")
+    print(f"Priority:    {fields.get('priority', {}).get('name', 'N/A')}")
+    assignee = fields.get('assignee', {}).get('displayName', 'Unassigned') if fields.get('assignee') else 'Unassigned'
+    print(f"Assignee:    {assignee}")
+    reporter = fields.get('reporter', {}).get('displayName', 'N/A') if fields.get('reporter') else 'N/A'
+    print(f"Reporter:    {reporter}")
+    print(f"Created:     {fields.get('created', 'N/A')}")
+    print(f"Updated:     {fields.get('updated', 'N/A')}")
+    print(f"\nDescription:")
+    print(f"    {_extract_description_text_cli(fields.get('description'))}")
+    
+    attachments = fields.get('attachment', [])
+    if attachments:
+        print(f"\nAttachments: ({len(attachments)})")
+        for att in attachments:
+            size_kb = att.get('size', 0) / 1024
+            print(f"    - {att.get('filename')} ({size_kb:.1f} KB)")
+    else:
+        print(f"\nAttachments: None")
+    print(f"{'='*60}\n")
+    
+    if download and attachments:
+        download_dir = Path.cwd() / 'downloads' / issue_key
+        result = await client.download_attachments(issue_key, str(download_dir))
+        print(f"Downloaded {result['downloaded']}/{result['total']} attachments to {result['directory']}")
+
+
+async def cli_add_comment(client: JiraClientAsync, issue_key: str, comment_text: str) -> None:
+    """CLI: Add comment to issue."""
+    print(f"Adding comment to {issue_key}...")
+    result = await client.add_comment(issue_key, comment_text)
+    print(f"✓ Comment added successfully (ID: {result.get('id')})")
+
+
+async def cli_upload_attachment(client: JiraClientAsync, issue_key: str, file_path: str) -> None:
+    """CLI: Upload attachment to issue."""
+    print(f"Uploading attachment to {issue_key}...")
+    result = await client.upload_attachment(issue_key, file_path)
+    filename = Path(file_path).name
+    print(f"✓ Attachment '{filename}' uploaded successfully")
+
+
+async def cli_update_description(client: JiraClientAsync, issue_key: str, description_text: str) -> None:
+    """CLI: Update issue description."""
+    print(f"Updating description for {issue_key}...")
+    await client.update_description(issue_key, description_text)
+    print(f"✓ Description updated successfully")
+
+
+async def cli_search_issues(client: JiraClientAsync, jql: str, max_results: int = 50) -> None:
+    """CLI: Search issues using JQL."""
+    print(f"Searching with JQL: {jql}")
+    result = await client.search_issues(jql, max_results)
+    
+    total = result.get('total', 0)
+    issues = result.get('issues', [])
+    
+    print(f"\nFound {total} issue(s), showing {len(issues)}:\n")
+    
+    for issue in issues:
+        fields = issue.get('fields', {})
+        key = issue.get('key')
+        summary = fields.get('summary', 'N/A')
+        status = fields.get('status', {}).get('name', 'N/A')
+        assignee = fields.get('assignee', {}).get('displayName', 'Unassigned') if fields.get('assignee') else 'Unassigned'
+        
+        print(f"  {key}: {summary}")
+        print(f"    Status: {status} | Assignee: {assignee}\n")
+
+
+def _extract_description_text_cli(description: Optional[dict]) -> str:
+    """Extract text from Atlassian Document Format description for CLI display."""
+    if not description or not isinstance(description, dict):
+        return 'N/A'
+    
+    content = description.get('content', [])
+    text_parts = []
+    
+    for item in content:
+        if item.get('type') == 'paragraph':
+            for para_content in item.get('content', []):
+                if para_content.get('type') == 'text':
+                    text_parts.append(para_content.get('text', ''))
+    
+    return '\n    '.join(text_parts) if text_parts else 'N/A'
+
+
+# ============================================================================
+# MCP Server Mode
+# ============================================================================
+
 class JiraMcpServer:
     """MCP Server for JIRA operations."""
     
@@ -312,6 +478,24 @@ class JiraMcpServer:
                         }
                     },
                     "required": ["issue_key"]
+                }
+            ),
+            Tool(
+                name="jira_update_description",
+                description="Update the description of a JIRA issue",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "issue_key": {
+                            "type": "string",
+                            "description": "JIRA issue key (e.g., PROJ-123)"
+                        },
+                        "description_text": {
+                            "type": "string",
+                            "description": "New description text for the issue"
+                        }
+                    },
+                    "required": ["issue_key", "description_text"]
                 }
             ),
             Tool(
@@ -397,6 +581,7 @@ class JiraMcpServer:
         
         handlers = {
             "jira_get_issue": self._tool_get_issue,
+            "jira_update_description": self._tool_update_description,
             "jira_add_comment": self._tool_add_comment,
             "jira_upload_attachment": self._tool_upload_attachment,
             "jira_download_attachments": self._tool_download_attachments,
@@ -424,6 +609,25 @@ class JiraMcpServer:
         issue_data = await self.jira_client.get_issue(issue_key)
         
         return self._format_issue_response(issue_data)
+    
+    async def _tool_update_description(self, arguments: dict) -> dict:
+        """Update JIRA issue description."""
+        issue_key = arguments["issue_key"]
+        description_text = arguments["description_text"]
+        
+        await self.jira_client.update_description(issue_key, description_text)
+        
+        # Fetch updated issue to confirm changes
+        updated_issue = await self.jira_client.get_issue(issue_key)
+        
+        return {
+            "success": True,
+            "issue_key": issue_key,
+            "message": f"Description updated successfully for {issue_key}",
+            "updated_description": self._extract_description_text(
+                updated_issue.get('fields', {}).get('description')
+            )
+        }
     
     async def _tool_add_comment(self, arguments: dict) -> dict:
         """Add comment to JIRA issue."""
@@ -598,12 +802,117 @@ def validate_environment() -> None:
         sys.exit(1)
 
 
-async def main() -> None:
-    """Main entry point for the MCP server."""
+def create_cli_parser() -> argparse.ArgumentParser:
+    """Create argument parser for CLI mode."""
+    parser = argparse.ArgumentParser(
+        description='JIRA MCP Server - MCP Service and CLI Tool',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Run as MCP server (default)
+  python3 jira_mcp_server.py
+  
+  # CLI Mode
+  python3 jira_mcp_server.py cli get-issue PROJ-123
+  python3 jira_mcp_server.py cli get-issue PROJ-123 --download
+  python3 jira_mcp_server.py cli add-comment PROJ-123 "Fix applied"
+  python3 jira_mcp_server.py cli upload-attachment PROJ-123 report.pdf
+  python3 jira_mcp_server.py cli update-description PROJ-123 "Updated specs"
+  python3 jira_mcp_server.py cli search "project = PROJ AND status = Open"
+        """
+    )
+    
+    subparsers = parser.add_subparsers(dest='mode', help='Operation mode')
+    
+    # CLI mode subparser
+    cli_parser = subparsers.add_parser('cli', help='Command-line interface mode')
+    cli_subparsers = cli_parser.add_subparsers(dest='command', help='CLI command')
+    
+    # get-issue command
+    get_issue_parser = cli_subparsers.add_parser('get-issue', help='Get issue details')
+    get_issue_parser.add_argument('issue_key', help='JIRA issue key (e.g., PROJ-123)')
+    get_issue_parser.add_argument('--download', action='store_true', help='Download attachments')
+    
+    # add-comment command
+    add_comment_parser = cli_subparsers.add_parser('add-comment', help='Add comment to issue')
+    add_comment_parser.add_argument('issue_key', help='JIRA issue key')
+    add_comment_parser.add_argument('comment', help='Comment text')
+    
+    # upload-attachment command
+    upload_parser = cli_subparsers.add_parser('upload-attachment', help='Upload attachment')
+    upload_parser.add_argument('issue_key', help='JIRA issue key')
+    upload_parser.add_argument('file_path', help='Path to file to upload')
+    
+    # update-description command
+    update_desc_parser = cli_subparsers.add_parser('update-description', help='Update issue description')
+    update_desc_parser.add_argument('issue_key', help='JIRA issue key')
+    update_desc_parser.add_argument('description', help='New description text')
+    
+    # search command
+    search_parser = cli_subparsers.add_parser('search', help='Search issues with JQL')
+    search_parser.add_argument('jql', help='JQL query string')
+    search_parser.add_argument('--max-results', type=int, default=50, help='Maximum results (default: 50)')
+    
+    return parser
+
+
+async def run_cli_mode(args: argparse.Namespace) -> None:
+    """Execute CLI mode command."""
     validate_environment()
     
+    # Initialize JIRA client
+    jira_url = os.getenv('JIRA_URL')
+    jira_user = os.getenv('JIRA_USER')
+    jira_token = os.getenv('JIRA_API_TOKEN')
+    
+    client = JiraClientAsync(jira_url, jira_user, jira_token)
+    
+    try:
+        if args.command == 'get-issue':
+            await cli_get_issue(client, args.issue_key, args.download)
+        elif args.command == 'add-comment':
+            await cli_add_comment(client, args.issue_key, args.comment)
+        elif args.command == 'upload-attachment':
+            await cli_upload_attachment(client, args.issue_key, args.file_path)
+        elif args.command == 'update-description':
+            await cli_update_description(client, args.issue_key, args.description)
+        elif args.command == 'search':
+            await cli_search_issues(client, args.jql, args.max_results)
+        else:
+            print(f"Error: Unknown command '{args.command}'", file=sys.stderr)
+            sys.exit(1)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+async def run_mcp_mode() -> None:
+    """Execute MCP server mode."""
+    validate_environment()
     server = JiraMcpServer()
     await server.run()
+
+
+async def main() -> None:
+    """Main entry point - routes to MCP server or CLI mode."""
+    # If no arguments or only standalone flags, run MCP server mode
+    if len(sys.argv) == 1:
+        await run_mcp_mode()
+        return
+    
+    # Parse arguments
+    parser = create_cli_parser()
+    args = parser.parse_args()
+    
+    # Route to appropriate mode
+    if args.mode == 'cli':
+        if not args.command:
+            parser.print_help()
+            sys.exit(1)
+        await run_cli_mode(args)
+    else:
+        # Default to MCP mode
+        await run_mcp_mode()
 
 
 if __name__ == "__main__":
