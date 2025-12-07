@@ -4,7 +4,7 @@ JIRA MCP Server
 
 A Model Context Protocol server that exposes JIRA operations as tools for AI agents.
 This server provides capabilities to interact with JIRA issues, including reading,
-commenting, and managing attachments.
+commenting, managing attachments, and updating descriptions.
 
 Usage:
     python3 jira_mcp_server.py
@@ -66,6 +66,34 @@ class JiraClientAsync:
             self._raise_http_error(response, issue_key)
         
         return response.json()
+    
+    async def update_description(self, issue_key: str, description_text: str) -> dict:
+        """Update the description of a JIRA issue."""
+        endpoint = f"{self.url}/rest/api/3/issue/{issue_key}"
+        
+        payload = {
+            "fields": {
+                "description": self._create_description_payload(description_text)
+            }
+        }
+        
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: requests.put(
+                endpoint,
+                auth=self.auth,
+                headers=self.headers,
+                data=json.dumps(payload),
+                timeout=DEFAULT_TIMEOUT
+            )
+        )
+        
+        if not response.ok:
+            self._raise_http_error(response, issue_key)
+        
+        # PUT returns 204 No Content on success
+        return {"status": "success", "issue_key": issue_key}
     
     async def add_comment(self, issue_key: str, comment_text: str) -> dict:
         """Add a comment to a JIRA issue."""
@@ -179,6 +207,24 @@ class JiraClientAsync:
             self._raise_http_error(response, jql)
         
         return response.json()
+    
+    def _create_description_payload(self, description_text: str) -> dict:
+        """Create description payload in Atlassian Document Format."""
+        return {
+            "type": "doc",
+            "version": 1,
+            "content": [
+                {
+                    "type": "paragraph",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": description_text
+                        }
+                    ]
+                }
+            ]
+        }
     
     def _create_comment_payload(self, comment_text: str) -> dict:
         """Create comment payload in Atlassian Document Format."""
@@ -315,6 +361,24 @@ class JiraMcpServer:
                 }
             ),
             Tool(
+                name="jira_update_description",
+                description="Update the description of a JIRA issue",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "issue_key": {
+                            "type": "string",
+                            "description": "JIRA issue key (e.g., PROJ-123)"
+                        },
+                        "description_text": {
+                            "type": "string",
+                            "description": "New description text for the issue"
+                        }
+                    },
+                    "required": ["issue_key", "description_text"]
+                }
+            ),
+            Tool(
                 name="jira_add_comment",
                 description="Add a comment to a JIRA issue",
                 inputSchema={
@@ -397,6 +461,7 @@ class JiraMcpServer:
         
         handlers = {
             "jira_get_issue": self._tool_get_issue,
+            "jira_update_description": self._tool_update_description,
             "jira_add_comment": self._tool_add_comment,
             "jira_upload_attachment": self._tool_upload_attachment,
             "jira_download_attachments": self._tool_download_attachments,
@@ -424,6 +489,25 @@ class JiraMcpServer:
         issue_data = await self.jira_client.get_issue(issue_key)
         
         return self._format_issue_response(issue_data)
+    
+    async def _tool_update_description(self, arguments: dict) -> dict:
+        """Update JIRA issue description."""
+        issue_key = arguments["issue_key"]
+        description_text = arguments["description_text"]
+        
+        await self.jira_client.update_description(issue_key, description_text)
+        
+        # Fetch updated issue to confirm changes
+        updated_issue = await self.jira_client.get_issue(issue_key)
+        
+        return {
+            "success": True,
+            "issue_key": issue_key,
+            "message": f"Description updated successfully for {issue_key}",
+            "updated_description": self._extract_description_text(
+                updated_issue.get('fields', {}).get('description')
+            )
+        }
     
     async def _tool_add_comment(self, arguments: dict) -> dict:
         """Add comment to JIRA issue."""
