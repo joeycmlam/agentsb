@@ -7,7 +7,9 @@ Model Context Protocol server for JIRA operations and document reading.
 
 import json
 import os
+import logging
 from typing import Any, Optional
+from pathlib import Path
 
 from mcp.server import Server
 from mcp.types import Tool, TextContent
@@ -24,6 +26,7 @@ class JiraMcpServer:
         self.server = Server("jira-mcp-server")
         self.jira_client: Optional[JiraClientAsync] = None
         self.doc_converter = get_converter()
+        self.logger = logging.getLogger(__name__)
         self._register_handlers()
 
     def _register_handlers(self) -> None:
@@ -202,6 +205,7 @@ class JiraMcpServer:
             result = await handler(arguments)
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
         except Exception as e:
+            self.logger.error(f"Tool execution failed for {name}: {e}", exc_info=True)
             error_result = {
                 "error": str(e),
                 "tool": name,
@@ -309,12 +313,80 @@ class JiraMcpServer:
         }
 
     async def _tool_read_file(self, arguments: dict) -> dict:
-        """Read and convert local file to markdown."""
+        """Read and convert local file to markdown with security validation."""
         file_path = arguments["file_path"]
-
-        result = await self.doc_converter.convert_file_async(file_path)
-
-        return result
+        
+        # Security validation to prevent path traversal attacks
+        try:
+            # Normalize and validate path
+            normalized_path = os.path.normpath(file_path)
+            
+            # Check for path traversal attempts
+            if normalized_path.startswith('..'):
+                error_msg = "Invalid file path - parent directory access not allowed"
+                self.logger.warning(f"Path traversal attempt blocked: {file_path}")
+                return {
+                    "error": error_msg,
+                    "success": False,
+                    "file_path": file_path
+                }
+            
+            # Check for absolute paths outside allowed directories
+            if os.path.isabs(normalized_path):
+                # For security, only allow absolute paths in specific directories
+                allowed_prefixes = [
+                    '/tmp/',
+                    '/var/tmp/',
+                    os.path.expanduser('~/Downloads/'),
+                    os.getcwd()  # Current working directory
+                ]
+                
+                if not any(normalized_path.startswith(prefix) for prefix in allowed_prefixes):
+                    error_msg = "Absolute file paths outside allowed directories are not permitted"
+                    self.logger.warning(f"Absolute path outside allowed directories blocked: {file_path}")
+                    return {
+                        "error": error_msg,
+                        "success": False,
+                        "file_path": file_path
+                    }
+            
+            # Convert to Path object for additional validation
+            path_obj = Path(normalized_path)
+            
+            # Ensure it's a file, not a directory or special file
+            if path_obj.exists() and not path_obj.is_file():
+                error_msg = "Path is not a regular file"
+                self.logger.warning(f"Non-file path rejected: {file_path}")
+                return {
+                    "error": error_msg,
+                    "success": False,
+                    "file_path": file_path
+                }
+            
+            # Log the conversion attempt
+            self.logger.info(f"Processing file conversion request for: {normalized_path}")
+            
+            # Perform the conversion
+            result = await self.doc_converter.convert_file_async(normalized_path)
+            
+            # Add the validated path to the result
+            result["file_path"] = normalized_path
+            
+            if result.get("success"):
+                self.logger.info(f"Successfully converted file: {normalized_path}")
+            else:
+                self.logger.warning(f"File conversion failed for {normalized_path}: {result.get('error')}")
+            
+            return result
+            
+        except Exception as e:
+            error_msg = f"Unexpected error processing file: {str(e)}"
+            self.logger.error(f"Unexpected error in _tool_read_file for {file_path}: {e}", exc_info=True)
+            return {
+                "error": error_msg,
+                "success": False,
+                "file_path": file_path
+            }
 
     def _format_issue_response(self, issue_data: dict) -> dict:
         """Format issue data for response."""
@@ -397,18 +469,23 @@ class JiraMcpServer:
         jira_token = os.getenv('JIRA_API_TOKEN')
 
         if not all([jira_url, jira_user, jira_token]):
-            raise ValueError(
+            error_msg = (
                 "Missing JIRA credentials. Please set environment variables: "
                 "JIRA_URL, JIRA_USER, JIRA_API_TOKEN"
             )
+            self.logger.error(error_msg)
+            raise ValueError(error_msg)
 
         self.jira_client = JiraClientAsync(jira_url, jira_user, jira_token)
+        self.logger.info(f"JIRA client initialized for {jira_url}")
 
     async def run(self) -> None:
         """Run the MCP server with stdio transport."""
         self._initialize_jira_client()
+        self.logger.info("Starting JIRA MCP Server")
 
         async with stdio_server() as (read_stream, write_stream):
+            self.logger.info("MCP Server ready for requests")
             await self.server.run(
                 read_stream,
                 write_stream,

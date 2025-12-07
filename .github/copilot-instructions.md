@@ -17,11 +17,12 @@ src/
 ├── jira_mcp_server_v2.py    # Entry point - routes between MCP/CLI modes
 ├── mcp_server.py             # MCP protocol handlers & tool definitions
 ├── jira_client.py            # Async JIRA API client (all HTTP operations)
+├── document_converter.py     # Document format conversion (PDF, Word, Excel, etc.)
 ├── cli.py                    # CLI terminal formatting & commands
 └── utils.py                  # Environment validation & arg parsing
 ```
 
-**Key Architectural Decision**: Each module has a single responsibility. When modifying JIRA API interactions, edit `jira_client.py`. For MCP tool definitions, edit `mcp_server.py`. Never mix concerns.
+**Key Architectural Decision**: Each module has a single responsibility. When modifying JIRA API interactions, edit `jira_client.py`. For MCP tool definitions, edit `mcp_server.py`. For document conversion, edit `document_converter.py`. Never mix concerns.
 
 ### Entry Point Flow
 
@@ -92,6 +93,88 @@ async def _handle_call_tool(self, name: str, arguments: Any) -> list[TextContent
 
 Always return JSON-serialized results, never raw Python objects.
 
+### 5. Document Reading & Conversion
+
+The server provides powerful document reading capabilities through `document_converter.py` using the MarkItDown library. This allows AI agents to read and understand various document formats.
+
+**Supported Document Formats:**
+- **PDF** - Portable Document Format
+- **Word** - `.docx`, `.doc` (Microsoft Word)
+- **Excel** - `.xlsx`, `.xls` (spreadsheets)
+- **PowerPoint** - `.pptx`, `.ppt` (presentations)
+- **Images** - `.jpg`, `.png`, `.bmp`, `.gif` (with OCR capabilities)
+- **Web** - `.html`, `.htm`
+- **Data** - `.csv`, `.json`, `.xml`
+- **Text** - `.txt`, `.md`, `.log`
+
+**Two Document Reading Modes:**
+
+1. **JIRA Attachment Reading** (`jira_read_attachment_content`):
+   - Reads attachments directly from JIRA issues
+   - Downloads and converts on-the-fly
+   - Returns markdown-formatted content
+   - Ideal for analyzing requirements, specs, mockups attached to tickets
+
+2. **Local File Reading** (`read_file`):
+   - Reads any local file from the filesystem
+   - Standalone document conversion service
+   - Works independently of JIRA
+   - Useful for analyzing local documentation, reports, designs
+
+**Document Converter Pattern:**
+```python
+# In document_converter.py
+class DocumentConverter:
+    def convert_to_markdown(self, file_source: Union[str, Path, BinaryIO], 
+                          file_extension: Optional[str] = None) -> str:
+        """
+        Convert document to markdown using MarkItDown.
+        
+        Args:
+            file_source: File path, Path object, or binary stream
+            file_extension: Optional extension hint for binary streams
+        
+        Returns:
+            Markdown-formatted text content
+        """
+```
+
+**Usage in MCP Tools:**
+```python
+# Read JIRA attachment
+async def _tool_read_attachment_content(self, arguments: dict) -> dict:
+    result = await self.jira_client.read_attachment_content(
+        issue_key=arguments["issue_key"],
+        filename=arguments["filename"],
+        attachment_id=arguments.get("attachment_id")
+    )
+    return result
+
+# Read local file
+async def _tool_read_file(self, arguments: dict) -> dict:
+    converter = get_converter()
+    markdown = await converter.convert_to_markdown_async(
+        file_path=arguments["file_path"]
+    )
+    return {
+        "file_path": arguments["file_path"],
+        "content": markdown,
+        "format": "markdown"
+    }
+```
+
+**Graceful Fallback:**
+If MarkItDown library is not installed, document conversion features are disabled gracefully. The server still functions for JIRA operations, but document reading tools return appropriate error messages.
+
+**Installation:**
+```bash
+# Install with document conversion support
+pip install markitdown
+
+# Optional: For enhanced image OCR
+pip install pytesseract
+```
+
 ## Developer Workflows
 
 ### Running the MCP Server
@@ -129,7 +212,12 @@ Use `--download` flag with `get-issue` to test attachment downloading.
 From `script/requirements.txt`:
 - `requests>=2.0` - HTTP client for JIRA API
 - `mcp>=0.1.0` - Model Context Protocol SDK
+- `markitdown>=0.1.0` - Document conversion to markdown (PDF, Word, Excel, etc.)
 - `deepdiff>=6.0.0` - Not actively used in core modules (legacy?)
+
+**Optional Dependencies for Enhanced Features:**
+- `pytesseract` - OCR for images (improves image-to-text extraction)
+- `Pillow` - Image processing (usually included with markitdown)
 
 No virtual environment management in codebase - assumes system Python 3.
 
@@ -188,17 +276,51 @@ Common endpoints in use:
 - `/issue/{issueKey}/attachments` - POST (upload), GET (download)
 - `/search` - GET with JQL query
 
+### Document Conversion Service
+
+The `document_converter.py` module uses MarkItDown library to convert various document formats to markdown:
+
+**Conversion Flow:**
+1. Accept file input (path, Path object, or binary stream)
+2. Detect file type from extension or MIME type
+3. Use appropriate converter (PDF, Word, Excel, etc.)
+4. Extract text, tables, images (with OCR if available)
+5. Return markdown-formatted content
+
+**Async Wrapper:**
+```python
+async def convert_to_markdown_async(self, file_path: Union[str, Path]) -> str:
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        None,
+        lambda: self.convert_to_markdown(file_path)
+    )
+```
+
+**Integration with JIRA Client:**
+The `JiraClientAsync` class integrates document conversion to provide seamless attachment reading:
+```python
+async def read_attachment_content(self, issue_key: str, filename: str, 
+                                  attachment_id: Optional[str] = None) -> dict:
+    # 1. Download attachment binary
+    # 2. Convert to markdown using DocumentConverter
+    # 3. Return structured result with content and metadata
+```
+
 ## Agent Ecosystem
 
 The `.github/agents/` directory contains role-specific agent definitions:
 - `developer.agent.md` - Full-cycle development with TDD, includes JIRA integration workflows
-- `ba-mcp.agent.md` - Business analysis with MCP tool usage
-- `architect.agent.md` - Architecture decisions and system design
-
-These agents expect MCP tools to be available. When adding new JIRA operations, consider updating relevant agent definitions.
-
 ## Common Pitfalls
 
+1. **Forgetting ADF format**: Always use `_create_description_payload()` and `_create_comment_payload()`
+2. **Blocking async**: Wrap `requests` calls in `run_in_executor()`
+3. **Missing env validation**: CLI mode calls `validate_environment()` - don't skip this
+4. **Hardcoded URLs**: Use `self.url` from client initialization
+5. **Large files**: Use `UPLOAD_TIMEOUT` (60s) instead of `DEFAULT_TIMEOUT` (30s) for attachments
+6. **Document conversion errors**: Check if MarkItDown is installed before attempting conversions
+7. **Binary vs text mode**: Always open files in binary mode (`'rb'`) when reading for conversion
+8. **Large document memory**: Document conversion loads entire file into memory - be mindful of file sizes
 1. **Forgetting ADF format**: Always use `_create_description_payload()` and `_create_comment_payload()`
 2. **Blocking async**: Wrap `requests` calls in `run_in_executor()`
 3. **Missing env validation**: CLI mode calls `validate_environment()` - don't skip this
