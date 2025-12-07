@@ -13,7 +13,7 @@ from mcp.server import Server
 from mcp.types import Tool, TextContent
 from mcp.server.stdio import stdio_server
 
-from .jira_client import JiraClientAsync
+from jira_client import JiraClientAsync
 
 
 class JiraMcpServer:

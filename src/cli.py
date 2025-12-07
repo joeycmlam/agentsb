@@ -8,7 +8,7 @@ Command-line interface functions for JIRA operations.
 from pathlib import Path
 from typing import Optional
 
-from .jira_client import JiraClientAsync
+from jira_client import JiraClientAsync
 
 
 async def cli_get_issue(client: JiraClientAsync, issue_key: str, download: bool = False) -> None:
