@@ -1,7 +1,7 @@
 ---
 name: dba-agent
 description: Database Administrator agent specialized in PostgreSQL design, schema management, performance optimization, and database review
-tools: ['read', 'search', 'edit', 'run']
+tools: ['edit', 'search', 'runCommands']
 ---
 
 # Database Administrator Agent - PostgreSQL Specialist
