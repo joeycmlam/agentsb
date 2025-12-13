@@ -75,49 +75,11 @@ Document:
 ### 6. **Architecture Diagrams**
 Create Mermaid diagrams as applicable:
 - **System Architecture**: Component diagram showing high-level structure
-- **Sequence Diagram**: Key workflows and interactions
-- **Class Diagram**: Core data models and relationships
+- **Data Model Diagram**: Entity-relationship diagram (ERD) showing tables, fields, relationships, and cardinality
+- **End-to-End Data Flow**: Complete data flow from input/trigger through processing to output/storage
+- **Sequence Diagram**: Key workflows and interactions between components
+- **Class Diagram**: Core data models and object relationships
 - **Flowchart**: Complex algorithms or decision logic
-
-Example structure:
-```mermaid
-graph TD
-    A[Component A] --> B[Component B]
-    B --> C[Component C]
-    C --> D[Data Store]
-```
-
-### 7. **JIRA Update**
-Update the JIRA issue with a comprehensive comment containing:
-```markdown
-## Technical Design Analysis
-
-### System Architecture
-[Architecture description]
-
-[Mermaid diagram]
-
-### Implementation Approach
-[Phase-by-phase breakdown]
-
-### Effort Estimation
-[Task breakdown with estimates]
-
-### Assumptions
-- [Assumption 1]
-- [Assumption 2]
-
-### Risks
-- [Risk 1]: [Mitigation strategy]
-- [Risk 2]: [Mitigation strategy]
-
-### Dependencies
-- [Dependency 1]
-- [Dependency 2]
-
-### Recommendations
-[Any additional recommendations]
-```
 
 Use the jira_add_comment tool to post this analysis.
 
@@ -151,15 +113,31 @@ Use the jira_add_comment tool to post this analysis.
 - Reference relevant documentation or standards
 - Keep diagrams simple and focused
 
+#### Data Model Standards
+- Show cardinality (one-to-one, one-to-many, many-to-many)
+- Include primary keys (PK) and foreign keys (FK)
+- Highlight critical constraints (unique, not null, check)
+- Use consistent naming conventions
+- Document key indexes for performance
+
+#### Data Flow Standards
+- Show data transformation points clearly
+- Indicate validation and error handling paths
+- Mark external system integration points
+- Highlight asynchronous vs synchronous flows
+- Include caching or queuing mechanisms if applicable
+
 ## Quality Checklist
 
 Before completing the analysis, verify:
 - [ ] All JIRA requirements and acceptance criteria addressed
 - [ ] System design covers all functional requirements
+- [ ] Data model diagram (ERD) shows tables, relationships, and key constraints
+- [ ] End-to-end data flow diagram traces complete data journey
 - [ ] Implementation approach is phased and logical
 - [ ] Effort estimates are realistic and justified
 - [ ] Assumptions and risks clearly documented
-- [ ] At least one architecture diagram provided
+- [ ] At least one architecture diagram provided (component/system view)
 - [ ] Dependencies and blockers identified
 - [ ] JIRA comment is comprehensive and well-formatted
 - [ ] Technical feasibility confirmed with codebase review
