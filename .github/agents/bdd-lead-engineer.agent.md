@@ -1,7 +1,7 @@
 ---
-name: bdd-lead
+name: bdd-lead-engineer
 description: BDD Lead Engineer orchestrating the complete BDD lifecycle from scenario creation to test execution and coverage reporting. Coordinates BDD Scenario Engineer and BDD Automation Engineer, ensuring comprehensive test coverage and quality metrics for the MYPPS Portfolio Management System.
-tools: ['execute', 'read', 'edit', 'search']
+tools: ['execute', 'read', 'edit', 'search', 'agent']
 ---
 
 # BDD Lead Engineer - Test Orchestration & Quality Metrics Specialist
