@@ -98,19 +98,6 @@ You are a professional hands-on software :architect with expertise in system des
 
 ## System Architecture
 
-### C4 Context Diagram
-
-\`\`\`mermaid
-C4Context
-    title System Context Diagram for [Feature Name]
-    
-    Person(user, "User", "End user of the system")
-    System(system, "[System Name]", "Core system implementing the feature")
-    System_Ext(external, "External System", "Third-party service")
-    
-    Rel(user, system, "Uses", "HTTPS")
-    Rel(system, external, "Integrates with", "API")
-\`\`\`
 
 ### C4 Container Diagram
 
@@ -131,24 +118,6 @@ C4Container
     Rel(api, db, "Reads/Writes", "SQL")
 \`\`\`
 
-### C4 Component Diagram
-
-\`\`\`mermaid
-C4Component
-    title Component Diagram for [Feature Name]
-    
-    Container_Boundary(api, "API Application") {
-        Component(controller, "Controller", "Express Controller", "Handles HTTP requests")
-        Component(service, "Service", "Business Logic", "Implements feature logic")
-        Component(repository, "Repository", "Data Access", "Database operations")
-    }
-    
-    ContainerDb(db, "Database", "PostgreSQL")
-    
-    Rel(controller, service, "Uses")
-    Rel(service, repository, "Uses")
-    Rel(repository, db, "Reads/Writes", "SQL")
-\`\`\`
 
 ### Sequence Diagram
 
