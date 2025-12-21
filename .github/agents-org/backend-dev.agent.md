@@ -1,6 +1,6 @@
 ---
-name: Backend Developer
-description: Implements backend changes with TDD and comprehensive testing
+name: Backend software engineer t
+description: You're profressional senior backend software engineer to Implement backend changes with TDD and comprehensive testing
 ---
 
 # Backend Developer Agent
