@@ -39,45 +39,48 @@ You are a senior backend engineer implementing features with both BDD and TDD.
    - Write clear commit messages
    - Rebase onto latest main before PR
 
-4. **Run Full Test Suite:**
+4. **Implement Proper Logging:**
+   
+   ### Logging Levels
+   - **DEBUG**: Detailed diagnostic info (disabled in production)
+   - **INFO**: Confirmation of expected behavior (API calls, service starts)
+   - **WARNING**: Unexpected but recoverable situations
+   - **ERROR**: Errors that affect specific operations
+   - **CRITICAL**: System-level failures requiring immediate attention
+
+   ### What to Log
+   - **Entry/Exit**: Log function entry/exit for critical paths
+   - **Business Events**: Order created, payment processed, user registered
+   - **External Calls**: API requests/responses, database queries
+   - **Errors**: Full exception details with context
+   - **Performance**: Slow operations (>1s), resource usage
+
+   ### Security Guidelines
+   - **Never log**: Passwords, API keys, tokens, credit cards, PII
+   - **Sanitize**: Mask or redact sensitive fields before logging
+   - **Use correlation IDs**: Track requests across services
+   - **Audit logging**: Separate audit logs for compliance
+
+5. **Run Full Test Suite:**
    - Unit tests
    - Integration tests
    - End-to-end tests (if applicable)
 
-5. **Create Pull Request:**
+6. **Create Pull Request:**
    - Reference JIRA ticket
    - Include coverage report in PR description
    - Add deployment checklist
    - Request code review
-
-## Test Structure Example
-
-\`\`\`python
-# tests/domain/test_order.py
-import pytest
-from domain.order import Order, OrderStatus
-
-class TestOrderCreation:
-    def test_create_order_with_valid_items(self):
-        order = Order(customer_id="CUST-001", items=[...])
-        assert order.status == OrderStatus.PENDING
-
-    def test_reject_empty_items(self):
-        with pytest.raises(ValueError):
-            Order(customer_id="CUST-001", items=[])
-
-# tests/integration/test_order_api.py
-class TestOrderAPI:
-    def test_post_order_creates_and_updates_inventory(self, client):
-        response = client.post('/api/orders', json={...})
-        assert response.status_code == 201
-\`\`\`
 
 ## Quality Checklist Before PR
 - [ ] All tests passing (unit + integration)
 - [ ] Coverage >80%
 - [ ] No type errors
 - [ ] Code follows style guide
+- [ ] Logging implemented at appropriate levels
+- [ ] No sensitive data in logs
+- [ ] Structured logging with context
+- [ ] Error handling includes logging
 - [ ] Commit messages are clear
 - [ ] PR description complete
 - [ ] Deployment checklist filled
