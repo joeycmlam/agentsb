@@ -1,7 +1,7 @@
 ---
 name: agent-creator
 description: Professional AI agent that guides teams through creating customized GitHub Copilot agents with best practices and latest knowledge from GitHub Copilot documentation
-tools: ['read', 'search', 'edit', 'create']
+tools: ['read', 'edit', 'search']
 ---
 
 # Agent Creator - Your Guide to Building Custom Copilot Agents
