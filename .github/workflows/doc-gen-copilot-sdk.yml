@@ -1,0 +1,310 @@
+name: Documentation Generator (Copilot SDK)
+
+on:
+  schedule:
+    - cron: '0 0 1 * *'  # Monthly on 1st at 00:00 UTC
+  workflow_dispatch:
+    inputs:
+      doc_types:
+        description: 'Documentation types to generate'
+        required: false
+        default: 'architecture,api,database'
+        type: string
+      agent_name:
+        description: 'Agent specialist to use'
+        required: false
+        default: 'doc-architect'
+        type: choice
+        options:
+          - doc-architect
+          - doc-api-specialist
+          - doc-database-specialist
+          - doc-architecture-specialist
+          - doc-workflow-specialist
+      mode:
+        description: 'Generation mode'
+        required: false
+        default: 'incremental'
+        type: choice
+        options:
+          - incremental
+          - full
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  generate-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for incremental mode analysis
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install GitHub Copilot CLI
+        run: npm i -g @github/copilot
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          pip install github-copilot-sdk --break-system-packages
+
+      - name: Authenticate GitHub CLI
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          gh auth status
+
+      - name: Prepare documentation directories
+        run: |
+          mkdir -p docs/architecture
+          mkdir -p docs/api
+          mkdir -p docs/database
+          mkdir -p docs/workflows
+          echo "✓ Documentation directories prepared"
+
+      # NEW: Conditional cleanup for full mode
+      - name: Clean documentation directories (full mode)
+        if: github.event.inputs.mode == 'full'
+        run: |
+          echo "🧹 Full mode: Cleaning existing documentation..."
+          rm -rf docs/architecture/*
+          rm -rf docs/api/*
+          rm -rf docs/database/*
+          rm -rf docs/workflows/*
+          echo "✓ Documentation directories cleaned for full regeneration"
+
+      # NEW: Detect changed files for incremental mode
+      - name: Detect changed files (incremental mode)
+        if: github.event.inputs.mode != 'full'
+        id: changed_files
+        run: |
+          # Get files changed since last doc generation
+          LAST_DOC_COMMIT=$(git log -1 --grep="docs: auto-generated documentation update" --format="%H" || echo "HEAD~30")
+          
+          # Get changed files (exclude docs directory itself)
+          CHANGED_FILES=$(git diff --name-only $LAST_DOC_COMMIT HEAD | grep -v '^docs/' || echo "")
+          
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No source files changed since last documentation generation"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "changed_files=" >> $GITHUB_OUTPUT
+          else
+            echo "Changed files detected:"
+            echo "$CHANGED_FILES"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            # Export as environment variable for Python script
+            echo "CHANGED_FILES<<EOF" >> $GITHUB_ENV
+            echo "$CHANGED_FILES" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+          fi
+
+      # NEW: Skip generation if no changes in incremental mode
+      - name: Skip generation (no changes)
+        if: |
+          github.event.inputs.mode != 'full' && 
+          steps.changed_files.outputs.has_changes == 'false'
+        run: |
+          echo "⏭️ Skipping documentation generation - no source changes detected"
+          echo "SKIP_GENERATION=true" >> $GITHUB_ENV
+
+      - name: Run documentation generation
+        if: env.SKIP_GENERATION != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          DOC_TYPES: ${{ github.event.inputs.doc_types || 'architecture,api,database' }}
+          AGENT_NAME: ${{ github.event.inputs.agent_name || 'doc-architect' }}
+          DOC_MODE: ${{ github.event.inputs.mode || 'incremental' }}
+          # CHANGED_FILES is set by previous step in incremental mode
+        run: |
+          echo "📝 Running documentation generation..."
+          echo "Mode: ${DOC_MODE}"
+          echo "Doc Types: ${DOC_TYPES}"
+          echo "Agent: ${AGENT_NAME}"
+          
+          if [ "${DOC_MODE}" = "incremental" ] && [ -n "${CHANGED_FILES}" ]; then
+            echo "Incremental mode - targeting changed files:"
+            echo "${CHANGED_FILES}"
+          fi
+          
+          python3 src/generate_docs_sdk.py
+
+      - name: Set branch name
+        id: branch
+        run: |
+          MODE_SUFFIX="${{ github.event.inputs.mode || 'incremental' }}"
+          BRANCH_NAME="docs/auto-gen-${MODE_SUFFIX}-$(date +%Y%m%d)-run-${{ github.run_number }}"
+          echo "name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+      - name: Create feature branch and commit docs
+        id: commit
+        if: env.SKIP_GENERATION != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create and checkout feature branch
+          BRANCH_NAME="${{ steps.branch.outputs.name }}"
+          git checkout -b "$BRANCH_NAME"
+
+          # Stage and commit documentation changes
+          git add docs/
+          if git diff --staged --quiet; then
+            echo "No documentation changes to commit"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            MODE="${{ github.event.inputs.mode || 'incremental' }}"
+            
+            # Build commit message based on mode
+            if [ "$MODE" = "full" ]; then
+              COMMIT_TITLE="docs: full documentation regeneration [skip ci]"
+              COMMIT_BODY="Complete regeneration of all documentation sections"
+            else
+              COMMIT_TITLE="docs: incremental documentation update [skip ci]"
+              COMMIT_BODY="Updated documentation for recently changed source files"
+            fi
+            
+            git commit -m "$COMMIT_TITLE" \
+              -m "" \
+              -m "$COMMIT_BODY" \
+              -m "" \
+              -m "Generated by: Copilot SDK Workflow" \
+              -m "Agent: ${{ github.event.inputs.agent_name || 'doc-architect' }}" \
+              -m "Mode: $MODE" \
+              -m "Doc types: ${{ github.event.inputs.doc_types || 'architecture,api,database' }}" \
+              -m "Run ID: ${{ github.run_id }}"
+            
+            git push origin "$BRANCH_NAME"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.commit.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          BRANCH_NAME="${{ steps.branch.outputs.name }}"
+          DOC_TYPES="${{ github.event.inputs.doc_types || 'architecture,api,database' }}"
+          AGENT_NAME="${{ github.event.inputs.agent_name || 'doc-architect' }}"
+          MODE="${{ github.event.inputs.mode || 'incremental' }}"
+          
+          # Build PR title and description based on mode
+          if [ "$MODE" = "full" ]; then
+            PR_TITLE="docs: full documentation regeneration"
+            MODE_DESCRIPTION="**Complete regeneration** of all documentation from scratch. Previous documentation was cleared before generation."
+            REVIEW_NOTE="- This is a full regeneration - expect significant changes\n  - Compare carefully with previous documentation\n  - Validate all sections are present and accurate"
+          else
+            PR_TITLE="docs: incremental documentation update"
+            MODE_DESCRIPTION="**Incremental update** based on recent source code changes. Only affected documentation sections were regenerated."
+            REVIEW_NOTE="- This is an incremental update - changes should be targeted\n  - Focus review on sections related to recently modified source files\n  - Existing documentation should remain stable"
+          fi
+          
+          gh pr create \
+            --title "$PR_TITLE" \
+            --body "## 📚 Documentation Update
+
+          This PR contains automatically generated documentation using GitHub Copilot SDK.
+
+          ### Generation Mode
+          $MODE_DESCRIPTION
+
+          ### Configuration
+          - **Agent**: \`${AGENT_NAME}\`
+          - **Mode**: \`${MODE}\` $([ "$MODE" = "full" ] && echo "🔄 (Full Regeneration)" || echo "📝 (Incremental)")
+          - **Doc Types**: \`${DOC_TYPES}\`
+          - **Model**: \`claude-sonnet-4.5\`
+
+          ### Changes
+          Generated/updated documentation in:
+          - \`docs/architecture/\` - System architecture and design
+          - \`docs/api/\` - API specifications and endpoints
+          - \`docs/database/\` - Database schemas and models
+          - \`docs/workflows/\` - Business logic and data flows
+
+          ### Generated by
+          - **Workflow**: \`${{ github.workflow }}\`
+          - **Run ID**: [\`${{ github.run_id }}\`](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          - **Triggered by**: \`${{ github.event_name }}\`
+          - **Technology**: GitHub Copilot SDK (Python)
+
+          ### Review Notes
+          $REVIEW_NOTE
+          - Verify technical details and code examples
+          - Check Mermaid diagrams render correctly
+          - Ensure sensitive information is not exposed
+
+          ---
+          *🤖 This PR was automatically created by the Copilot SDK Documentation Generator workflow.*" \
+            --head "$BRANCH_NAME" \
+            --base main \
+            --label "documentation,automated,mode:$MODE"
+
+      - name: Upload documentation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-docs-${{ github.event.inputs.mode || 'incremental' }}-${{ github.run_id }}
+          path: docs/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Generate summary
+        if: always()
+        run: |
+          echo "## 📊 Documentation Generation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          MODE="${{ github.event.inputs.mode || 'incremental' }}"
+          
+          echo "**Mode**: $MODE $([ "$MODE" = "full" ] && echo "🔄 (Full Regeneration)" || echo "📝 (Incremental)")" >> $GITHUB_STEP_SUMMARY
+          echo "**Agent Used**: ${{ github.event.inputs.agent_name || 'doc-architect' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Doc Types**: ${{ github.event.inputs.doc_types || 'architecture,api,database' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Model**: claude-sonnet-4.5" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ env.SKIP_GENERATION }}" = "true" ]; then
+            echo "⏭️ **Status**: Skipped - no source changes detected (incremental mode)" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.commit.outputs.has_changes }}" = "true" ]; then
+            echo "✅ **Status**: Documentation generated successfully" >> $GITHUB_STEP_SUMMARY
+            echo "🔗 **Pull Request**: Created on branch \`${{ steps.branch.outputs.name }}\`" >> $GITHUB_STEP_SUMMARY
+            
+            if [ "$MODE" = "full" ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "ℹ️ **Note**: Full mode regenerated all documentation from scratch" >> $GITHUB_STEP_SUMMARY
+            elif [ -n "${{ env.CHANGED_FILES }}" ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### Source Files Changed (Incremental Trigger)" >> $GITHUB_STEP_SUMMARY
+              echo "${{ env.CHANGED_FILES }}" | while read file; do
+                echo "- \`$file\`" >> $GITHUB_STEP_SUMMARY
+              done
+            fi
+          else
+            echo "ℹ️ **Status**: No documentation changes detected" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Generated Files" >> $GITHUB_STEP_SUMMARY
+          if [ -d docs/ ]; then
+            find docs/ -type f -name "*.md" | sort | while read file; do
+              echo "- \`$file\`" >> $GITHUB_STEP_SUMMARY
+            done
+          else
+            echo "*No documentation files found*" >> $GITHUB_STEP_SUMMARY
+          fi
