@@ -1,0 +1,352 @@
+{
+  "repositories": [
+    {
+      "name": "joeycmlam/mypps",
+      "url": "https://github.com/joeycmlam/mypps.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/mtkdata",
+      "url": "https://github.com/joeycmlam/mtkdata.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/stock-price-api",
+      "url": "https://github.com/joeycmlam/stock-price-api.git",
+      "enabled": true,
+      "description": "Stock Price API with multiple provider support"
+    },
+    {
+      "name": "joeycmlam/ibportfolio",
+      "url": "https://github.com/joeycmlam/ibportfolio.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/aicore",
+      "url": "https://github.com/joeycmlam/aicore.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/pps",
+      "url": "https://github.com/joeycmlam/pps.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/njstool",
+      "url": "https://github.com/joeycmlam/njstool.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/ppmrepo",
+      "url": "https://github.com/joeycmlam/ppmrepo.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/promptengineer",
+      "url": "https://github.com/joeycmlam/promptengineer.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/kyc-maintenance",
+      "url": "https://github.com/joeycmlam/kyc-maintenance.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/api-dashboard",
+      "url": "https://github.com/joeycmlam/api-dashboard.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/personal-finance-dashboard",
+      "url": "https://github.com/joeycmlam/personal-finance-dashboard.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/sales-dashboard",
+      "url": "https://github.com/joeycmlam/sales-dashboard.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/diagram",
+      "url": "https://github.com/joeycmlam/diagram.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/mysys",
+      "url": "https://github.com/joeycmlam/mysys.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/devopstool",
+      "url": "https://github.com/joeycmlam/devopstool.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/aws",
+      "url": "https://github.com/joeycmlam/aws.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/myAIBot",
+      "url": "https://github.com/joeycmlam/myAIBot.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/gic",
+      "url": "https://github.com/joeycmlam/gic.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/pymono",
+      "url": "https://github.com/joeycmlam/pymono.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/nestjs-app",
+      "url": "https://github.com/joeycmlam/nestjs-app.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/ppm-gui",
+      "url": "https://github.com/joeycmlam/ppm-gui.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/codetest",
+      "url": "https://github.com/joeycmlam/codetest.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/py_monorep",
+      "url": "https://github.com/joeycmlam/py_monorep.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/pyUtil",
+      "url": "https://github.com/joeycmlam/pyUtil.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/mqBroker",
+      "url": "https://github.com/joeycmlam/mqBroker.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/accountProvider",
+      "url": "https://github.com/joeycmlam/accountProvider.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/eurekaBalancer",
+      "url": "https://github.com/joeycmlam/eurekaBalancer.git",
+      "enabled": true,
+      "description": "Eureka Server"
+    },
+    {
+      "name": "joeycmlam/kafka-consumder",
+      "url": "https://github.com/joeycmlam/kafka-consumder.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/kafka-producer",
+      "url": "https://github.com/joeycmlam/kafka-producer.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/holdingProvider",
+      "url": "https://github.com/joeycmlam/holdingProvider.git",
+      "enabled": true,
+      "description": "holdingProvider for Eureka Client with Gradle"
+    },
+    {
+      "name": "joeycmlam/jsWriter",
+      "url": "https://github.com/joeycmlam/jsWriter.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/nj-sample",
+      "url": "https://github.com/joeycmlam/nj-sample.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/tsv3",
+      "url": "https://github.com/joeycmlam/tsv3.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/ts-sample",
+      "url": "https://github.com/joeycmlam/ts-sample.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/njsws",
+      "url": "https://github.com/joeycmlam/njsws.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/njs1etl",
+      "url": "https://github.com/joeycmlam/njs1etl.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/ra2",
+      "url": "https://github.com/joeycmlam/ra2.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/ra1",
+      "url": "https://github.com/joeycmlam/ra1.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/js-samlple",
+      "url": "https://github.com/joeycmlam/js-samlple.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/t1",
+      "url": "https://github.com/joeycmlam/t1.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/AlgowIB",
+      "url": "https://github.com/joeycmlam/AlgowIB.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/ppm-ui",
+      "url": "https://github.com/joeycmlam/ppm-ui.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/ppm-java",
+      "url": "https://github.com/joeycmlam/ppm-java.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/pyHoldingProvider",
+      "url": "https://github.com/joeycmlam/pyHoldingProvider.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/db-script",
+      "url": "https://github.com/joeycmlam/db-script.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/kafka-consumer",
+      "url": "https://github.com/joeycmlam/kafka-consumer.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/tool",
+      "url": "https://github.com/joeycmlam/tool.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/script",
+      "url": "https://github.com/joeycmlam/script.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/HierarchyProvider",
+      "url": "https://github.com/joeycmlam/HierarchyProvider.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/topawards-services",
+      "url": "https://github.com/joeycmlam/topawards-services.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/react-app-ta-v2",
+      "url": "https://github.com/joeycmlam/react-app-ta-v2.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/my-app-react-ta-backup",
+      "url": "https://github.com/joeycmlam/my-app-react-ta-backup.git",
+      "enabled": true,
+      "description": "TopAwards React Client"
+    },
+    {
+      "name": "joeycmlam/myAppReact",
+      "url": "https://github.com/joeycmlam/myAppReact.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/firstPthyonDockerSample",
+      "url": "https://github.com/joeycmlam/firstPthyonDockerSample.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/react-ta-cli",
+      "url": "https://github.com/joeycmlam/react-ta-cli.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/py-top-awards-server",
+      "url": "https://github.com/joeycmlam/py-top-awards-server.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/ang-topawards-cli",
+      "url": "https://github.com/joeycmlam/ang-topawards-cli.git",
+      "enabled": true,
+      "description": null
+    }
+  ]
+}
