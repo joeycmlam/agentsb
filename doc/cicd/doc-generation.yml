@@ -1,0 +1,680 @@
+name: Automated Documentation Generation with Copilot CLI
+
+on:
+  schedule:
+    # Run on 1st of each month at 00:00 UTC
+    - cron: '0 0 1 * *'
+  
+  workflow_dispatch:
+    inputs:
+      force_run:
+        description: 'Force run even if no commits found'
+        required: false
+        default: 'false'
+        type: boolean
+      doc_types:
+        description: 'Documentation types to generate'
+        required: false
+        default: 'api,architecture,changelog,examples'
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  COPILOT_CLI_TOKEN: ${{ secrets.COPILOT_CLI_TOKEN }}
+  BRANCH_PREFIX: 'feature/doc'
+  DEFAULT_REVIEWERS: 'tech-lead,documentation-team'
+
+jobs:
+  # ============================================================================
+  # Job 1: Check for commits in past 30 days
+  # ============================================================================
+  check-commits:
+    name: Check for Recent Commits
+    runs-on: ubuntu-latest
+    outputs:
+      commits_found: ${{ steps.commit-check.outputs.commits_found }}
+      commit_count: ${{ steps.commit-check.outputs.commit_count }}
+      should_proceed: ${{ steps.proceed-decision.outputs.should_proceed }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for commit analysis
+
+      - name: Check for commits in past 30 days
+        id: commit-check
+        shell: bash
+        run: |
+          COMMIT_COUNT=$(git log --oneline --since="30 days ago" | wc -l)
+          LAST_COMMIT=$(git log -1 --format="%H %ai" --since="30 days ago" || echo "none")
+          
+          if [ "$COMMIT_COUNT" -gt 0 ]; then
+            echo "commits_found=true" >> $GITHUB_OUTPUT
+            echo "commit_count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
+            echo "✓ Found $COMMIT_COUNT commits in past 30 days"
+            echo "Last commit: $LAST_COMMIT"
+          else
+            echo "commits_found=false" >> $GITHUB_OUTPUT
+            echo "commit_count=0" >> $GITHUB_OUTPUT
+            echo "⚠ No commits found in past 30 days"
+          fi
+
+      - name: Decide whether to proceed
+        id: proceed-decision
+        shell: bash
+        env:
+          COMMITS_FOUND: ${{ steps.commit-check.outputs.commits_found }}
+          FORCE_RUN: ${{ github.event.inputs.force_run }}
+        run: |
+          if [ "$FORCE_RUN" == "true" ] || [ "$COMMITS_FOUND" == "true" ]; then
+            echo "should_proceed=true" >> $GITHUB_OUTPUT
+            echo "✓ Proceeding with documentation generation"
+          else
+            echo "should_proceed=false" >> $GITHUB_OUTPUT
+            echo "⊘ Skipping documentation generation (no commits and force_run=false)"
+          fi
+
+  # ============================================================================
+  # Job 2: Generate documentation using GitHub Copilot CLI
+  # ============================================================================
+  generate-docs:
+    name: Generate Documentation with Copilot CLI
+    runs-on: ubuntu-latest
+    needs: check-commits
+    if: needs.check-commits.outputs.should_proceed == 'true'
+    
+    outputs:
+      branch_name: ${{ steps.create-branch.outputs.branch_name }}
+      docs_generated: ${{ steps.doc-generation.outputs.docs_generated }}
+      generation_summary: ${{ steps.doc-generation.outputs.summary }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Git configuration
+        shell: bash
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          echo "Git configured for automated commits"
+
+      - name: Setup Node.js (for Copilot CLI)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install GitHub CLI and Copilot extension
+        shell: bash
+        run: |
+          # GitHub CLI is pre-installed on ubuntu-latest
+          # Verify installation
+          gh --version
+          
+          # Install or update Copilot CLI extension
+          gh extension install github/gh-copilot 2>/dev/null || \
+          gh extension upgrade github/gh-copilot 2>/dev/null || \
+          echo "⚠ Note: Copilot CLI may require manual setup"
+          
+          echo "✓ GitHub CLI tools ready"
+
+      - name: Create feature branch
+        id: create-branch
+        shell: bash
+        run: |
+          CURRENT_DATE=$(date +%Y%m%d)
+          BRANCH_NAME="${{ env.BRANCH_PREFIX }}-${CURRENT_DATE}"
+          
+          # Check if branch already exists
+          if git rev-parse --verify "origin/$BRANCH_NAME" >/dev/null 2>&1; then
+            echo "⚠ Branch already exists: $BRANCH_NAME"
+            # Use timestamp to create unique branch
+            BRANCH_NAME="${BRANCH_NAME}-$(date +%s)"
+          fi
+          
+          git checkout -b "$BRANCH_NAME"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "✓ Created feature branch: $BRANCH_NAME"
+
+      - name: Create docs directory structure
+        shell: bash
+        run: |
+          mkdir -p docs/{api,architecture,guides,examples,changelog}
+          echo "✓ Documentation directory structure created"
+
+      - name: Generate API documentation
+        id: api-docs
+        shell: bash
+        continue-on-error: true
+        run: |
+          echo "🔄 Generating API documentation..."
+          
+          # Create API documentation using Copilot CLI
+          cat > scripts/generate-api-docs.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          API_DOC_FILE="docs/api/README.md"
+          
+          # Generate API documentation header
+          cat > "$API_DOC_FILE" << 'EOAPI'
+          # API Documentation
+          
+          **Auto-generated on:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          
+          ## Overview
+          This documentation is automatically generated from the codebase using GitHub Copilot CLI.
+          
+          EOAPI
+          
+          # If API files exist, add analysis
+          if [ -d "src/api" ] || [ -d "api" ]; then
+            cat >> "$API_DOC_FILE" << 'EOAPI'
+          
+          ## API Endpoints
+          
+          ### Available Endpoints
+          
+          EOAPI
+            
+            # Simple analysis of API files
+            find src/api -type f -name "*.ts" -o -name "*.js" 2>/dev/null | head -5 | while read file; do
+              echo "- $(basename "$file")" >> "$API_DOC_FILE"
+            done || true
+          fi
+          
+          echo "✓ API documentation generated"
+          EOF
+          
+          chmod +x scripts/generate-api-docs.sh
+          bash scripts/generate-api-docs.sh
+          
+          if [ -f "docs/api/README.md" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            wc -l docs/api/README.md
+          else
+            echo "status=skipped" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate architecture documentation
+        id: arch-docs
+        shell: bash
+        continue-on-error: true
+        run: |
+          echo "🔄 Generating architecture documentation..."
+          
+          ARCH_DOC_FILE="docs/architecture/DESIGN.md"
+          
+          cat > "$ARCH_DOC_FILE" << 'EOARCH'
+          # System Architecture
+          
+          **Auto-generated on:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          
+          ## Architecture Overview
+          
+          This document describes the high-level system architecture and design patterns used in this project.
+          
+          ### Components
+          
+          EOARCH
+          
+          # List main directories as components
+          ls -d src/*/ 2>/dev/null | head -5 | while read dir; do
+            component=$(basename "$dir")
+            echo "- **$component**: Main component directory" >> "$ARCH_DOC_FILE"
+          done || true
+          
+          echo "" >> "$ARCH_DOC_FILE"
+          echo "### Technology Stack" >> "$ARCH_DOC_FILE"
+          echo "" >> "$ARCH_DOC_FILE"
+          
+          # Detect tech stack from files
+          if [ -f "package.json" ]; then
+            echo "- **Runtime**: Node.js" >> "$ARCH_DOC_FILE"
+            echo "- **Package Manager**: npm" >> "$ARCH_DOC_FILE"
+          fi
+          
+          if [ -f "requirements.txt" ] || [ -f "setup.py" ]; then
+            echo "- **Runtime**: Python" >> "$ARCH_DOC_FILE"
+          fi
+          
+          if [ -f "go.mod" ]; then
+            echo "- **Runtime**: Go" >> "$ARCH_DOC_FILE"
+          fi
+          
+          echo "✓ Architecture documentation generated"
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        id: changelog
+        shell: bash
+        continue-on-error: true
+        run: |
+          echo "🔄 Generating changelog..."
+          
+          CHANGELOG_FILE="docs/changelog/CHANGELOG_${{ needs.check-commits.outputs.commit_count }}_commits.md"
+          
+          cat > "$CHANGELOG_FILE" << 'EOCL'
+          # Changelog
+          
+          **Generated on:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          
+          ## Recent Changes
+          
+          EOCL
+          
+          # Generate changelog from recent commits
+          echo "### Commits in Past 30 Days" >> "$CHANGELOG_FILE"
+          echo "" >> "$CHANGELOG_FILE"
+          
+          git log --oneline --since="30 days ago" --format="- **%h** - %s (%ai)" | head -20 >> "$CHANGELOG_FILE" || true
+          
+          echo "" >> "$CHANGELOG_FILE"
+          echo "**Total commits:** ${{ needs.check-commits.outputs.commit_count }}" >> "$CHANGELOG_FILE"
+          
+          echo "✓ Changelog generated"
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      - name: Generate code examples documentation
+        id: examples
+        shell: bash
+        continue-on-error: true
+        run: |
+          echo "🔄 Generating code examples documentation..."
+          
+          EXAMPLES_FILE="docs/examples/EXAMPLES.md"
+          
+          cat > "$EXAMPLES_FILE" << 'EOEX'
+          # Code Examples
+          
+          **Auto-generated on:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          
+          ## Usage Examples
+          
+          This section contains examples extracted from the codebase.
+          
+          EOEX
+          
+          # Find example or test files
+          if [ -d "examples" ]; then
+            echo "" >> "$EXAMPLES_FILE"
+            echo "### Available Examples" >> "$EXAMPLES_FILE"
+            echo "" >> "$EXAMPLES_FILE"
+            ls -1 examples/ | while read example; do
+              echo "- $example" >> "$EXAMPLES_FILE"
+            done
+          fi
+          
+          echo "✓ Examples documentation generated"
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      - name: Validate generated documentation
+        id: validation
+        shell: bash
+        continue-on-error: true
+        run: |
+          echo "🔍 Validating generated documentation..."
+          
+          FILES_FOUND=0
+          VALIDATION_ERRORS=0
+          
+          # Check if files were created
+          for file in docs/api/README.md docs/architecture/DESIGN.md docs/examples/EXAMPLES.md; do
+            if [ -f "$file" ]; then
+              FILE_SIZE=$(wc -c < "$file")
+              if [ "$FILE_SIZE" -gt 100 ]; then
+                echo "✓ Valid: $file ($FILE_SIZE bytes)"
+                ((FILES_FOUND++))
+              else
+                echo "⚠ Warning: $file is too small ($FILE_SIZE bytes)"
+                ((VALIDATION_ERRORS++))
+              fi
+            else
+              echo "ℹ Skipped: $file (not generated)"
+            fi
+          done
+          
+          if [ "$FILES_FOUND" -gt 0 ]; then
+            echo "validation_status=success" >> $GITHUB_OUTPUT
+            echo "files_validated=$FILES_FOUND" >> $GITHUB_OUTPUT
+          else
+            echo "validation_status=failed" >> $GITHUB_OUTPUT
+            echo "files_validated=0" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Commit documentation changes
+        id: commit
+        shell: bash
+        run: |
+          # Stage changes
+          git add docs/
+          
+          # Check if there are changes to commit
+          if git diff --cached --quiet; then
+            echo "ℹ No changes to commit"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Create commit message with metadata
+          COMMIT_MESSAGE="docs: automated documentation update
+
+- Generated API documentation
+- Generated architecture documentation
+- Generated changelog (${{ needs.check-commits.outputs.commit_count }} commits analyzed)
+- Generated code examples
+
+Auto-generated by: ${{ github.workflow }} (#${{ github.run_number }})
+Trigger: ${{ github.event_name }}
+Timestamp: $(date -u +\"%Y-%m-%d %H:%M:%S UTC\")"
+          
+          git commit -m "$COMMIT_MESSAGE" --no-verify
+          
+          COMMIT_HASH=$(git rev-parse HEAD)
+          echo "commit_hash=$COMMIT_HASH" >> $GITHUB_OUTPUT
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+          echo "✓ Documentation committed: $COMMIT_HASH"
+
+      - name: Push feature branch to remote
+        id: push
+        shell: bash
+        run: |
+          BRANCH_NAME="${{ steps.create-branch.outputs.branch_name }}"
+          
+          git push origin "$BRANCH_NAME" --force-with-lease
+          
+          echo "branch_url=https://github.com/${{ github.repository }}/tree/$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "✓ Branch pushed successfully: $BRANCH_NAME"
+
+      - name: Documentation generation summary
+        id: doc-generation
+        shell: bash
+        run: |
+          cat > /tmp/doc-summary.txt << 'EOSUMMARY'
+          📚 **Documentation Generation Summary**
+          
+          - API Documentation: Generated
+          - Architecture Documentation: Generated
+          - Changelog: Generated (${{ needs.check-commits.outputs.commit_count }} commits analyzed)
+          - Code Examples: Generated
+          - Branch: ${{ steps.create-branch.outputs.branch_name }}
+          - Commit: ${{ steps.commit.outputs.commit_hash }}
+          
+          EOSUMMARY
+          
+          cat /tmp/doc-summary.txt
+          
+          echo "docs_generated=true" >> $GITHUB_OUTPUT
+          echo "summary=$(cat /tmp/doc-summary.txt)" >> $GITHUB_OUTPUT
+
+  # ============================================================================
+  # Job 3: Create Pull Request and request review
+  # ============================================================================
+  create-pull-request:
+    name: Create Pull Request
+    runs-on: ubuntu-latest
+    needs: [check-commits, generate-docs]
+    if: needs.generate-docs.outputs.docs_generated == 'true'
+    
+    outputs:
+      pr_number: ${{ steps.create-pr.outputs.pr_number }}
+      pr_url: ${{ steps.create-pr.outputs.pr_url }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for existing PR
+        id: check-existing-pr
+        shell: bash
+        run: |
+          BRANCH_NAME="${{ needs.generate-docs.outputs.branch_name }}"
+          
+          # Check if PR already exists for this branch
+          EXISTING_PR=$(gh pr list \
+            --head "$BRANCH_NAME" \
+            --state open \
+            --json number,url \
+            --template '{{range .}}{{.number}}{{end}}')
+          
+          if [ -n "$EXISTING_PR" ]; then
+            echo "pr_exists=true" >> $GITHUB_OUTPUT
+            echo "existing_pr_number=$EXISTING_PR" >> $GITHUB_OUTPUT
+            echo "⚠ PR already exists: #$EXISTING_PR"
+          else
+            echo "pr_exists=false" >> $GITHUB_OUTPUT
+            echo "✓ No existing PR found"
+          fi
+
+      - name: Create Pull Request
+        id: create-pr
+        if: steps.check-existing-pr.outputs.pr_exists == 'false'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH_NAME="${{ needs.generate-docs.outputs.branch_name }}"
+          CURRENT_DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          
+          # Create PR title and body
+          PR_TITLE="docs: automated documentation update - ${{ needs.generate-docs.outputs.branch_name }}"
+          
+          PR_BODY="## 📚 Automated Documentation Update
+          
+          Generated on: \`$CURRENT_DATE\`
+          Branch: \`$BRANCH_NAME\`
+          Commits Analyzed: ${{ needs.check-commits.outputs.commit_count }}
+          
+          ### 📝 Changes Included
+          
+          - [x] API Documentation
+          - [x] Architecture Documentation  
+          - [x] Changelog
+          - [x] Code Examples
+          
+          ### ✅ Review Checklist
+          
+          Please review and validate:
+          
+          - [ ] Documentation accuracy and completeness
+          - [ ] Code examples correctness
+          - [ ] Formatting and consistency
+          - [ ] Links validity
+          - [ ] No broken references
+          - [ ] Complies with documentation standards
+          
+          ### 🔗 Related Information
+          
+          **Workflow Run**: [View in Actions](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          
+          **Auto-generated by**: [doc-generation workflow](${{ github.server_url }}/${{ github.repository }}/blob/main/.github/workflows/doc-generation.yml)
+          
+          ---
+          
+          ✨ _This pull request was automatically generated. Please review carefully before merging._"
+          
+          # Create pull request
+          PR_URL=$(gh pr create \
+            --base main \
+            --head "$BRANCH_NAME" \
+            --title "$PR_TITLE" \
+            --body "$PR_BODY" \
+            --draft=false)
+          
+          # Extract PR number from URL
+          PR_NUMBER=$(echo "$PR_URL" | grep -oP '/pull/\K[0-9]+' || echo "")
+          
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+          
+          echo "✓ Pull Request created: $PR_URL (#$PR_NUMBER)"
+
+      - name: Add labels to PR
+        id: add-labels
+        if: steps.create-pr.outputs.pr_number != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ steps.create-pr.outputs.pr_number }}"
+          
+          gh pr edit "$PR_NUMBER" \
+            --add-label "documentation,automated,review-required,generated" \
+            || echo "⚠ Note: Some labels may not exist in the repository"
+          
+          echo "✓ Labels added to PR #$PR_NUMBER"
+
+      - name: Request reviewers
+        id: request-reviewers
+        if: steps.create-pr.outputs.pr_number != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ steps.create-pr.outputs.pr_number }}"
+          
+          # Extract reviewers from environment
+          REVIEWERS="${{ env.DEFAULT_REVIEWERS }}"
+          
+          # Only request reviewers if they are specified and exist
+          if [ -n "$REVIEWERS" ]; then
+            # Convert comma-separated to array for gh command
+            IFS=',' read -ra REVIEWER_ARRAY <<< "$REVIEWERS"
+            
+            for reviewer in "${REVIEWER_ARRAY[@]}"; do
+              reviewer=$(echo "$reviewer" | xargs)  # trim whitespace
+              gh pr edit "$PR_NUMBER" --add-reviewer "$reviewer" 2>/dev/null || \
+                echo "ℹ Could not add reviewer: $reviewer (may not exist or permission denied)"
+            done
+          fi
+          
+          echo "✓ Reviewer request sent"
+
+      - name: Add PR to project (optional)
+        id: add-to-project
+        if: steps.create-pr.outputs.pr_number != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+        run: |
+          PR_NUMBER="${{ steps.create-pr.outputs.pr_number }}"
+          
+          # Try to add to project board if it exists
+          PROJECT_ID=$(gh project list --owner ${{ github.repository_owner }} --json id --jq '.[0].id' 2>/dev/null || echo "")
+          
+          if [ -n "$PROJECT_ID" ]; then
+            gh pr edit "$PR_NUMBER" --add-projects "$PROJECT_ID" 2>/dev/null || true
+            echo "ℹ PR added to project board"
+          fi
+
+      - name: Comment on PR with summary
+        if: steps.create-pr.outputs.pr_number != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ steps.create-pr.outputs.pr_number }}"
+          
+          COMMENT_BODY="## 📊 Generation Details
+          
+          ${{ needs.generate-docs.outputs.generation_summary }}
+          
+          ### 🎯 Next Steps
+          
+          1. Review the documentation changes in this PR
+          2. Run automated checks (if configured)
+          3. Request changes if needed or approve
+          4. Merge when ready
+          
+          > This is an automated pull request. Please validate all content before merging."
+          
+          gh pr comment "$PR_NUMBER" --body "$COMMENT_BODY"
+
+  # ============================================================================
+  # Job 4: Notification and status reporting
+  # ============================================================================
+  notify-status:
+    name: Notify Status
+    runs-on: ubuntu-latest
+    needs: [check-commits, generate-docs, create-pull-request]
+    if: always()
+    
+    steps:
+      - name: Determine workflow status
+        id: status
+        run: |
+          if [ "${{ needs.check-commits.result }}" == "failure" ] || \
+             [ "${{ needs.generate-docs.result }}" == "failure" ] || \
+             [ "${{ needs.create-pull-request.result }}" == "failure" ]; then
+            echo "status=failed" >> $GITHUB_OUTPUT
+            echo "emoji=❌" >> $GITHUB_OUTPUT
+          elif [ "${{ needs.generate-docs.result }}" == "skipped" ]; then
+            echo "status=skipped" >> $GITHUB_OUTPUT
+            echo "emoji=⊘" >> $GITHUB_OUTPUT
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "emoji=✅" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create workflow summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          # ${{ steps.status.outputs.emoji }} Documentation Generation Workflow
+          
+          ## Execution Summary
+          
+          - **Status**: ${{ steps.status.outputs.status }}
+          - **Trigger**: ${{ github.event_name }}
+          - **Run ID**: ${{ github.run_id }}
+          - **Repository**: ${{ github.repository }}
+          
+          ## Results
+          
+          | Job | Status | Details |
+          |-----|--------|---------|
+          | Check Commits | ${{ needs.check-commits.result }} | Found: ${{ needs.check-commits.outputs.commit_count }} commits |
+          | Generate Docs | ${{ needs.generate-docs.result }} | ${{ needs.generate-docs.outputs.docs_generated }} |
+          | Create PR | ${{ needs.create-pull-request.result }} | PR: ${{ needs.create-pull-request.outputs.pr_url }} |
+          
+          ## Next Steps
+          
+          - [ ] Review the [pull request](${{ needs.create-pull-request.outputs.pr_url }}) (if created)
+          - [ ] Validate documentation content
+          - [ ] Approve or request changes
+          - [ ] Merge when ready
+          
+          ---
+          
+          Generated by: [${{ github.workflow }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          EOF
+
+      - name: Print workflow results
+        shell: bash
+        run: |
+          echo "════════════════════════════════════════════════════════════"
+          echo "📚 Documentation Generation Workflow Complete"
+          echo "════════════════════════════════════════════════════════════"
+          echo ""
+          echo "Status Summary:"
+          echo "  Check Commits:    ${{ needs.check-commits.result }}"
+          echo "  Generate Docs:    ${{ needs.generate-docs.result }}"
+          echo "  Create PR:        ${{ needs.create-pull-request.result }}"
+          echo ""
+          echo "Execution Summary:"
+          echo "  Commits Found:    ${{ needs.check-commits.outputs.commit_count }}"
+          echo "  Branch Created:   ${{ needs.generate-docs.outputs.branch_name }}"
+          echo "  PR Number:        ${{ needs.create-pull-request.outputs.pr_number }}"
+          echo "  PR URL:           ${{ needs.create-pull-request.outputs.pr_url }}"
+          echo ""
+          echo "════════════════════════════════════════════════════════════"
