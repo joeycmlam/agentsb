@@ -1,0 +1,22 @@
+# Repository Analysis Tool Requirements
+# Install with: pip install -r repo_analysis_requirements.txt
+
+# Core dependencies
+pandas>=2.0.0
+openpyxl>=3.1.0
+requests>=2.31.0
+
+# GitHub Copilot SDK (as of Feb 2026)
+# Note: Install from GitHub if not yet on PyPI
+# github-copilot-sdk>=1.0.0
+
+# Optional: If Copilot SDK requires these
+anthropic>=0.18.0
+openai>=1.0.0
+
+# XML parsing for coverage reports
+# (included in Python standard library, but noting for completeness)
+
+# Development/Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
