@@ -68,6 +68,22 @@ class TestMetrics:
     test_frameworks: List[str] = None
     languages: List[str] = None
     
+    # Commit activity metrics
+    total_commits: int = 0
+    commits_last_30_days: int = 0
+    commits_last_90_days: int = 0
+    commits_last_year: int = 0
+    avg_commits_per_week: float = 0.0
+    active_contributors: int = 0
+    
+    # CI/CD pipeline detection
+    has_cicd_pipeline: bool = False
+    cicd_platform: str = "None"
+    has_automated_testing: bool = False
+    has_security_scanning: bool = False
+    has_deployment_automation: bool = False
+    cicd_workflows: List[str] = None
+    
     # Status
     analysis_status: str = "pending"  # pending, success, partial, failed
     error_message: Optional[str] = None
@@ -77,6 +93,8 @@ class TestMetrics:
             self.test_frameworks = []
         if self.languages is None:
             self.languages = []
+        if self.cicd_workflows is None:
+            self.cicd_workflows = []
 
 
 class GitHubClient:
@@ -192,6 +210,12 @@ class RepositoryAnalyzer:
             
             # Extract coverage metrics
             await self._extract_coverage(repo_path, metrics)
+            
+            # Analyze commit activity
+            await self._analyze_commit_activity(repo_path, metrics)
+            
+            # Detect CI/CD pipeline
+            await self._detect_cicd_pipeline(repo_path, metrics)
             
             metrics.analysis_status = "success"
             print(f"   ✅ Analysis complete")
@@ -438,6 +462,283 @@ Response format: {{"type": "unit|integration|e2e|performance|smoke", "count": <n
             print(f"   📈 JS Coverage: {metrics.unit_test_coverage_pct:.1f}%")
         except Exception as e:
             print(f"   ⚠️  Failed to parse coverage-summary.json: {e}")
+    
+    async def _analyze_commit_activity(self, repo_path: Path, metrics: TestMetrics):
+        """Analyze git commit history for activity metrics"""
+        try:
+            loop = asyncio.get_event_loop()
+            
+            # Total commits
+            result = await loop.run_in_executor(
+                None,
+                lambda: subprocess.run(
+                    ["git", "rev-list", "--count", "HEAD"],
+                    cwd=repo_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+            )
+            if result.returncode == 0:
+                metrics.total_commits = int(result.stdout.strip())
+            
+            # Commits in last 30 days
+            result = await loop.run_in_executor(
+                None,
+                lambda: subprocess.run(
+                    ["git", "rev-list", "--count", "--since=30.days.ago", "HEAD"],
+                    cwd=repo_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+            )
+            if result.returncode == 0:
+                metrics.commits_last_30_days = int(result.stdout.strip())
+            
+            # Commits in last 90 days
+            result = await loop.run_in_executor(
+                None,
+                lambda: subprocess.run(
+                    ["git", "rev-list", "--count", "--since=90.days.ago", "HEAD"],
+                    cwd=repo_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+            )
+            if result.returncode == 0:
+                metrics.commits_last_90_days = int(result.stdout.strip())
+            
+            # Commits in last year
+            result = await loop.run_in_executor(
+                None,
+                lambda: subprocess.run(
+                    ["git", "rev-list", "--count", "--since=1.year.ago", "HEAD"],
+                    cwd=repo_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+            )
+            if result.returncode == 0:
+                metrics.commits_last_year = int(result.stdout.strip())
+            
+            # Average commits per week (based on last 90 days)
+            if metrics.commits_last_90_days > 0:
+                metrics.avg_commits_per_week = round(metrics.commits_last_90_days / (90 / 7), 2)
+            
+            # Active contributors (last 90 days)
+            result = await loop.run_in_executor(
+                None,
+                lambda: subprocess.run(
+                    ["git", "shortlog", "-sn", "--since=90.days.ago", "HEAD"],
+                    cwd=repo_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+            )
+            if result.returncode == 0:
+                contributors = [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
+                metrics.active_contributors = len(contributors)
+            
+            print(f"   📊 Commits: {metrics.total_commits} total, {metrics.commits_last_30_days} (30d), "
+                  f"{metrics.avg_commits_per_week}/week avg, {metrics.active_contributors} contributors")
+            
+        except Exception as e:
+            print(f"   ⚠️  Commit analysis failed: {e}")
+    
+    async def _detect_cicd_pipeline(self, repo_path: Path, metrics: TestMetrics):
+        """Detect CI/CD pipeline configuration and capabilities"""
+        try:
+            platforms_detected = []
+            
+            # GitHub Actions
+            gh_workflows = repo_path / ".github" / "workflows"
+            if gh_workflows.exists():
+                workflow_files = list(gh_workflows.glob("*.yml")) + list(gh_workflows.glob("*.yaml"))
+                if workflow_files:
+                    platforms_detected.append("GitHub Actions")
+                    await self._analyze_github_workflows(workflow_files, metrics)
+            
+            # GitLab CI
+            gitlab_ci = repo_path / ".gitlab-ci.yml"
+            if gitlab_ci.exists():
+                platforms_detected.append("GitLab CI")
+                await self._analyze_gitlab_ci(gitlab_ci, metrics)
+            
+            # Jenkins
+            jenkinsfile = repo_path / "Jenkinsfile"
+            if jenkinsfile.exists():
+                platforms_detected.append("Jenkins")
+                await self._analyze_jenkinsfile(jenkinsfile, metrics)
+            
+            # CircleCI
+            circleci_config = repo_path / ".circleci" / "config.yml"
+            if circleci_config.exists():
+                platforms_detected.append("CircleCI")
+                await self._analyze_circleci_config(circleci_config, metrics)
+            
+            # Travis CI
+            travis_config = repo_path / ".travis.yml"
+            if travis_config.exists():
+                platforms_detected.append("Travis CI")
+                await self._analyze_travis_config(travis_config, metrics)
+            
+            # Azure Pipelines
+            azure_pipelines = repo_path / "azure-pipelines.yml"
+            if azure_pipelines.exists():
+                platforms_detected.append("Azure Pipelines")
+                await self._analyze_azure_pipelines(azure_pipelines, metrics)
+            
+            # Set CI/CD status
+            if platforms_detected:
+                metrics.has_cicd_pipeline = True
+                metrics.cicd_platform = ", ".join(platforms_detected)
+                print(f"   🔧 CI/CD: {metrics.cicd_platform}")
+                print(f"      - Automated Testing: {'✅' if metrics.has_automated_testing else '❌'}")
+                print(f"      - Security Scanning: {'✅' if metrics.has_security_scanning else '❌'}")
+                print(f"      - Deployment: {'✅' if metrics.has_deployment_automation else '❌'}")
+            else:
+                print("   🔧 CI/CD: Not detected")
+            
+        except Exception as e:
+            print(f"   ⚠️  CI/CD detection failed: {e}")
+    
+    async def _analyze_github_workflows(self, workflow_files: List[Path], metrics: TestMetrics):
+        """Analyze GitHub Actions workflow files"""
+        for workflow_file in workflow_files:
+            try:
+                content = workflow_file.read_text().lower()
+                workflow_name = workflow_file.stem
+                metrics.cicd_workflows.append(workflow_name)
+                
+                # Detect automated testing
+                test_keywords = ['test', 'pytest', 'jest', 'npm test', 'npm run test', 'mvn test', 'go test']
+                if any(keyword in content for keyword in test_keywords):
+                    metrics.has_automated_testing = True
+                
+                # Detect security scanning
+                security_keywords = [
+                    'codeql', 'snyk', 'trivy', 'security', 'vulnerability', 'scan',
+                    'dependabot', 'npm audit', 'safety check', 'bandit'
+                ]
+                if any(keyword in content for keyword in security_keywords):
+                    metrics.has_security_scanning = True
+                
+                # Detect deployment
+                deploy_keywords = [
+                    'deploy', 'deployment', 'publish', 'release', 'docker push',
+                    'kubectl apply', 'terraform apply', 'aws deploy', 'azure deploy',
+                    'gcloud deploy', 'heroku', 'vercel', 'netlify'
+                ]
+                if any(keyword in content for keyword in deploy_keywords):
+                    metrics.has_deployment_automation = True
+                
+            except Exception as e:
+                print(f"   ⚠️  Failed to analyze workflow {workflow_file.name}: {e}")
+    
+    async def _analyze_gitlab_ci(self, config_file: Path, metrics: TestMetrics):
+        """Analyze GitLab CI configuration"""
+        try:
+            content = config_file.read_text().lower()
+            metrics.cicd_workflows.append(".gitlab-ci.yml")
+            
+            # Detect test stage
+            if 'test:' in content or 'stages:' in content:
+                metrics.has_automated_testing = True
+            
+            # Detect security scanning
+            if any(keyword in content for keyword in ['sast', 'dependency_scanning', 'security', 'container_scanning']):
+                metrics.has_security_scanning = True
+            
+            # Detect deployment
+            if any(keyword in content for keyword in ['deploy:', 'production:', 'staging:']):
+                metrics.has_deployment_automation = True
+                
+        except Exception as e:
+            print(f"   ⚠️  Failed to analyze GitLab CI: {e}")
+    
+    async def _analyze_jenkinsfile(self, jenkinsfile: Path, metrics: TestMetrics):
+        """Analyze Jenkinsfile"""
+        try:
+            content = jenkinsfile.read_text().lower()
+            metrics.cicd_workflows.append("Jenkinsfile")
+            
+            # Detect test stage
+            if any(keyword in content for keyword in ['test', 'stage(\'test\')', 'stage("test")']):
+                metrics.has_automated_testing = True
+            
+            # Detect security scanning
+            if any(keyword in content for keyword in ['sonar', 'security', 'owasp']):
+                metrics.has_security_scanning = True
+            
+            # Detect deployment
+            if any(keyword in content for keyword in ['deploy', 'stage(\'deploy\')', 'stage("deploy")']):
+                metrics.has_deployment_automation = True
+                
+        except Exception as e:
+            print(f"   ⚠️  Failed to analyze Jenkinsfile: {e}")
+    
+    async def _analyze_circleci_config(self, config_file: Path, metrics: TestMetrics):
+        """Analyze CircleCI configuration"""
+        try:
+            content = config_file.read_text().lower()
+            metrics.cicd_workflows.append(".circleci/config.yml")
+            
+            # Detect testing
+            if 'test' in content:
+                metrics.has_automated_testing = True
+            
+            # Detect security
+            if any(keyword in content for keyword in ['security', 'vulnerability', 'scan']):
+                metrics.has_security_scanning = True
+            
+            # Detect deployment
+            if 'deploy' in content:
+                metrics.has_deployment_automation = True
+                
+        except Exception as e:
+            print(f"   ⚠️  Failed to analyze CircleCI config: {e}")
+    
+    async def _analyze_travis_config(self, config_file: Path, metrics: TestMetrics):
+        """Analyze Travis CI configuration"""
+        try:
+            content = config_file.read_text().lower()
+            metrics.cicd_workflows.append(".travis.yml")
+            
+            # Detect testing (usually in script section)
+            if 'script:' in content:
+                metrics.has_automated_testing = True
+            
+            # Detect deployment
+            if 'deploy:' in content:
+                metrics.has_deployment_automation = True
+                
+        except Exception as e:
+            print(f"   ⚠️  Failed to analyze Travis CI config: {e}")
+    
+    async def _analyze_azure_pipelines(self, config_file: Path, metrics: TestMetrics):
+        """Analyze Azure Pipelines configuration"""
+        try:
+            content = config_file.read_text().lower()
+            metrics.cicd_workflows.append("azure-pipelines.yml")
+            
+            # Detect testing
+            if 'test' in content:
+                metrics.has_automated_testing = True
+            
+            # Detect security
+            if any(keyword in content for keyword in ['security', 'vulnerability']):
+                metrics.has_security_scanning = True
+            
+            # Detect deployment
+            if 'deployment:' in content or 'deploy' in content:
+                metrics.has_deployment_automation = True
+                
+        except Exception as e:
+            print(f"   ⚠️  Failed to analyze Azure Pipelines: {e}")
 
 
 class ExcelReportGenerator:
@@ -454,6 +755,7 @@ class ExcelReportGenerator:
         # Convert lists to strings for Excel
         df['test_frameworks'] = df['test_frameworks'].apply(lambda x: ', '.join(x) if x else '')
         df['languages'] = df['languages'].apply(lambda x: ', '.join(x) if x else '')
+        df['cicd_workflows'] = df['cicd_workflows'].apply(lambda x: ', '.join(x) if x else '')
         
         # Reorder columns
         column_order = [
@@ -464,6 +766,10 @@ class ExcelReportGenerator:
             'e2e_test_count', 'e2e_test_files',
             'smoke_test_count', 'smoke_test_files',
             'total_test_files', 'test_frameworks', 'languages',
+            'total_commits', 'commits_last_30_days', 'commits_last_90_days', 'commits_last_year',
+            'avg_commits_per_week', 'active_contributors',
+            'has_cicd_pipeline', 'cicd_platform', 'has_automated_testing',
+            'has_security_scanning', 'has_deployment_automation', 'cicd_workflows',
             'repo_url', 'error_message'
         ]
         df = df[column_order]
@@ -485,6 +791,10 @@ class ExcelReportGenerator:
             'E2E Tests', 'E2E Files',
             'Smoke Tests', 'Smoke Files',
             'Total Test Files', 'Frameworks', 'Languages',
+            'Total Commits', 'Commits (30d)', 'Commits (90d)', 'Commits (1y)',
+            'Commits/Week', 'Contributors',
+            'Has CI/CD', 'CI/CD Platform', 'Auto Testing',
+            'Security Scan', 'Auto Deploy', 'Workflows',
             'Repository URL', 'Error Message'
         ]
         
