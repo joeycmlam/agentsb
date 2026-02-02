@@ -10,6 +10,7 @@ Date: February 2026
 import os
 import sys
 import json
+import re
 import asyncio
 import subprocess
 from pathlib import Path
@@ -25,13 +26,14 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils.dataframe import dataframe_to_rows
 
+
 # GitHub Copilot SDK imports
 try:
-    from github_copilot_sdk import CopilotClient, CodeAnalyzer
+    from copilot import CopilotClient
     COPILOT_SDK_AVAILABLE = True
 except ImportError:
-    print("⚠️  GitHub Copilot SDK not available. Install with: pip install github-copilot-sdk")
     COPILOT_SDK_AVAILABLE = False
+    CopilotClient = None  # For type hints when SDK not available
 
 
 @dataclass
@@ -184,12 +186,43 @@ class GitHubClient:
 class RepositoryAnalyzer:
     """Analyzes repository test structure and coverage"""
     
-    def __init__(self, copilot_client: Optional[Any] = None):
-        self.copilot_client = copilot_client
+    def __init__(self, use_copilot: bool = True):
+        self.use_copilot = use_copilot and COPILOT_SDK_AVAILABLE
+        self.copilot_client = None
+        self.copilot_session = None
+        self._copilot_started = False
+    
+    async def _init_copilot(self):
+        """Async initialization of Copilot client"""
+        if self.use_copilot and not self._copilot_started:
+            try:
+                self.copilot_client = CopilotClient()
+                await self.copilot_client.start()
+                self._copilot_started = True
+                print("   🤖 GitHub Copilot SDK initialized")
+            except Exception as e:
+                print(f"   ⚠️  Copilot SDK initialization failed: {e}")
+                self.use_copilot = False
+                self.copilot_client = None
+    
+    async def _cleanup_copilot(self):
+        """Async cleanup of Copilot client"""
+        if self.copilot_client and self._copilot_started:
+            try:
+                if self.copilot_session:
+                    await self.copilot_session.destroy()
+                    self.copilot_session = None
+                await self.copilot_client.stop()
+                self._copilot_started = False
+            except Exception as e:
+                print(f"   ⚠️  Copilot cleanup error: {e}")
     
     async def analyze_repository(self, repo_path: Path, repo_name: str, repo_url: str) -> TestMetrics:
         """Analyze a repository and return test metrics"""
         print(f"\n📊 Analyzing: {repo_name}")
+        
+        # Initialize Copilot if needed
+        await self._init_copilot()
         
         metrics = TestMetrics(
             repo_name=repo_name,
@@ -314,37 +347,93 @@ class RepositoryAnalyzer:
     
     async def _analyze_with_copilot(self, test_files: List[Path], metrics: TestMetrics):
         """Use GitHub Copilot SDK to intelligently classify tests"""
-        print("   🤖 Using Copilot SDK for intelligent analysis...")
+        if not self.copilot_client:
+            print("   📝 Copilot not available, using pattern-based analysis...")
+            self._analyze_with_patterns(test_files, metrics)
+            return
         
+        print("   🤖 Using Copilot SDK for intelligent test classification...")
+        
+        try:
+            # Create a new session for this analysis
+            self.copilot_session = await self.copilot_client.create_session()
+            
+            # Process files in batches to avoid overwhelming the model
+            batch_size = 10
+            for i in range(0, len(test_files), batch_size):
+                batch = test_files[i:i+batch_size]
+                await self._classify_batch_with_copilot(batch, metrics)
+            
+            # Clean up session
+            if self.copilot_session:
+                await self.copilot_session.destroy()
+                self.copilot_session = None
+                
+        except Exception as e:
+            print(f"   ⚠️  Copilot analysis failed: {e}")
+            print("   📝 Falling back to pattern-based analysis...")
+            self._analyze_with_patterns(test_files, metrics)
+    
+    async def _classify_batch_with_copilot(self, test_files: List[Path], metrics: TestMetrics):
+        """Classify a batch of test files using Copilot"""
+        if not self.copilot_session:
+            return
+        
+        # Prepare file information for analysis
+        file_info = []
         for test_file in test_files:
             try:
-                code = test_file.read_text()
-                
-                # Use Copilot to classify test type
-                prompt = f"""Analyze this test file and classify it:
-                
-File: {test_file.name}
-Code:
-```
-{code[:2000]}  # First 2000 chars
-```
+                content = test_file.read_text()[:500]  # First 500 chars
+                file_info.append({
+                    "path": str(test_file),
+                    "name": test_file.name,
+                    "preview": content
+                })
+            except Exception:
+                continue
+        
+        if not file_info:
+            return
+        
+        # Build prompt for Copilot
+        prompt = f"""Analyze these test files and classify each as one of: unit, integration, e2e, performance, or smoke test.
 
-Classify as one of: unit, integration, e2e, performance, smoke
-Also count the number of test cases.
-Response format: {{"type": "unit|integration|e2e|performance|smoke", "count": <number>}}
-"""
+For each file, respond with the format: "filename: type"
+
+Files to analyze:
+{json.dumps(file_info, indent=2)}
+
+Classifications:"""
+        
+        # Send to Copilot and wait for response
+        try:
+            from copilot.types import MessageOptions
+            message_options: MessageOptions = {
+                "prompt": prompt,
+            }
+            response = await self.copilot_session.send_and_wait(message_options, timeout=30.0)
+            
+            # Parse response
+            classifications = []
+            if response and hasattr(response, 'data') and hasattr(response.data, 'content'):
+                content = response.data.content
+                # Extract classifications from response
+                if content:  # Ensure content is not None
+                    for line in content.split('\n'):
+                        # Look for patterns like "file.py: unit" or "file.py -> e2e"
+                        match = re.search(r'([^:]+):\s*(unit|integration|e2e|performance|smoke)', line, re.IGNORECASE)
+                        if match:
+                            classifications.append({
+                                "file": match.group(1).strip(),
+                                "type": match.group(2).lower()
+                            })
+            
+            # Process classifications
+            for classification in classifications:
+                test_type = classification["type"]
+                count = 1  # Assume 1 test per file, could be improved
                 
-                # Call Copilot SDK (async)
-                response = await self.copilot_client.analyze(prompt)
-                result = json.loads(response)
-                
-                test_type = result.get("type", "unit")
-                count = result.get("count", 1)
-                
-                # Update metrics
-                if test_type == "unit":
-                    metrics.unit_test_count += count
-                elif test_type == "e2e":
+                if test_type == "e2e":
                     metrics.e2e_test_count += count
                     metrics.e2e_test_files += 1
                 elif test_type == "performance":
@@ -353,10 +442,21 @@ Response format: {{"type": "unit|integration|e2e|performance|smoke", "count": <n
                 elif test_type == "smoke":
                     metrics.smoke_test_count += count
                     metrics.smoke_test_files += 1
-                
-            except Exception as e:
-                print(f"   ⚠️  Copilot analysis failed for {test_file.name}: {e}")
-                # Fallback to pattern matching
+                elif test_type == "integration":
+                    metrics.unit_test_count += count  # Count as unit for now
+                else:  # unit
+                    metrics.unit_test_count += count
+            
+            # For files not classified by Copilot, fall back to pattern matching
+            classified_files = {c["file"] for c in classifications}
+            for test_file in test_files:
+                if str(test_file) not in classified_files and test_file.name not in classified_files:
+                    self._classify_by_pattern(test_file, metrics)
+        
+        except Exception as e:
+            # If Copilot fails, fall back to pattern matching for all files
+            print(f"   ⚠️  Copilot classification failed: {e}")
+            for test_file in test_files:
                 self._classify_by_pattern(test_file, metrics)
     
     def _analyze_with_patterns(self, test_files: List[Path], metrics: TestMetrics):
@@ -903,18 +1003,9 @@ async def main():
     
     print(f"\n📋 Analyzing {len(enabled_repos)} repositories...")
     
-    # Initialize Copilot SDK if available
-    copilot_client = None
-    if COPILOT_SDK_AVAILABLE:
-        try:
-            copilot_client = CopilotClient()
-            print("✅ GitHub Copilot SDK initialized")
-        except Exception as e:
-            print(f"⚠️  Copilot SDK initialization failed: {e}")
-    
     # Analyze each repository
     github_client = GitHubClient()
-    analyzer = RepositoryAnalyzer(copilot_client)
+    analyzer = RepositoryAnalyzer(use_copilot=True)  # Enable Copilot analysis
     metrics_list = []
     
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -944,6 +1035,9 @@ async def main():
                     error_message="Failed to clone repository"
                 )
                 metrics_list.append(metrics)
+    
+    # Clean up Copilot client
+    await analyzer._cleanup_copilot()
     
     # Generate Excel report
     report_generator = ExcelReportGenerator()
