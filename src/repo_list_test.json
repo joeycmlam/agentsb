@@ -1,0 +1,16 @@
+{
+  "repositories": [
+    {
+      "name": "joeycmlam/mypps",
+      "url": "https://github.com/joeycmlam/mypps.git",
+      "enabled": true,
+      "description": null
+    },
+    {
+      "name": "joeycmlam/mtkdata",
+      "url": "https://github.com/joeycmlam/mtkdata.git",
+      "enabled": true,
+      "description": null
+    }
+  ]
+}

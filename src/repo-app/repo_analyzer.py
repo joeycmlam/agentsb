@@ -15,14 +15,18 @@ import tempfile
 from pathlib import Path
 from datetime import datetime
 
-from .models import TestMetrics
-from .github_client import GitHubClient
-from .analyzer import RepositoryAnalyzer
-from .report_generator import ExcelReportGenerator
+from models import TestMetrics
+from github_client import GitHubClient
+from analyzer import RepositoryAnalyzer
+from report_generator import ExcelReportGenerator
 
 
 async def main():
     """Main execution flow"""
+    # Load environment variables from .env file
+    from utils import load_env_file
+    load_env_file()
+    
     import argparse
     
     parser = argparse.ArgumentParser(description="Analyze GitHub repositories for test metrics")

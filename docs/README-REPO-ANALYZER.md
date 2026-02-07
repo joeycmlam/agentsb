@@ -4,16 +4,22 @@
 
 Successfully refactored from **800+ line monolithic file** into **5 focused modules** (~1100 total lines with better separation of concerns).
 
-## New Module Structure
+## Module Structure (KISS Architecture)
 
 ```
-src/
-├── repo_analyzer.py       # Main CLI entry point (~150 lines)
+src/repo-app/
+├── repo_analyzer.py       # Main CLI entry point (~130 lines)
+├── analyzer.py            # Core analysis logic (~680 lines)
 ├── models.py              # Data models (~80 lines)  
 ├── github_client.py       # GitHub API operations (~100 lines)
-├── analyzer.py            # Core analysis logic (~650 lines)
-└── report_generator.py    # Excel generation (~120 lines)
+├── report_generator.py    # Excel generation (~120 lines)
+├── constants.py           # Configuration & patterns (~100 lines)
+└── __init__.py            # Package initialization
 ```
+
+**Note:** This is a pragmatic, simple structure. The monolithic `analyzer.py` handles all analysis 
+(language detection, test classification, coverage extraction, git analysis, CI/CD detection). 
+This is appropriate for the current scope - when complexity justifies it, we can split into modules.
 
 ## Benefits of Refactoring
 
@@ -136,19 +142,27 @@ Set `"enabled": false` to skip repositories.
 
 ## Architecture Principles Applied
 
-### KISS (Keep It Simple)
-- Each module does one thing well
-- No premature optimization
-- Clear, descriptive names
+### KISS (Keep It Simple) ⭐ Prime Principle
+- Flat module structure with 7 focused files
+- `analyzer.py` is monolithic by design: one clear job = analyze repositories
+- No premature service classes or detection abstractions
+- Direct pattern matching in Python vs over-engineered utility classes
+- Code clarity > architectural patterns at this scope
 
 ### YAGNI (You Aren't Gonna Need It)
-- No generic frameworks built
-- Features implemented for current needs
-- Easy to extend when requirements arise
+- Build for current requirements (GitHub repo analysis)
+- No "pluggable framework" infrastructure
+- When complexity justifies refactoring, split analyzer.py then
+- Pragmatic trade-off: monolithic simplicity beats premature modularity
 
-### Dependency Inversion
-- High-level (repo_analyzer.py) depends on abstractions (models.py)
-- Low-level modules (github_client, analyzer) are independent
+### Why NOT Over-Engineered?
+**Avoided:**
+- ❌ Separate `LanguageDetector`, `FrameworkDetector`, `TestClassifier` classes
+- ❌ `services/` directory for utility functions  
+- ❌ Extra indirection layers for simple pattern matching
+- ❌ Copilot wrapper classes that don't exist in current code
+
+**Result:** Easier to understand, modify, and maintain
 
 ## Migration Guide
 

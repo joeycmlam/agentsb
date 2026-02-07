@@ -8,6 +8,29 @@ Utility functions for JIRA MCP Server.
 import argparse
 import os
 import sys
+from typing import Optional
+
+
+def load_env_file(env_path: Optional[str] = None) -> None:
+    """Load environment variables from .env file.
+    
+    Args:
+        env_path: Optional path to .env file. Defaults to workspace root/.env
+    """
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        print("Warning: python-dotenv not installed. Install with: pip install python-dotenv")
+        return
+    
+    if env_path is None:
+        # Look for .env in workspace root (2 levels up from src/utils.py to repo root)
+        env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
+    
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+    else:
+        print(f"Note: .env file not found at {env_path}")
 
 
 def validate_environment() -> None:
