@@ -41,8 +41,8 @@ class TestMetrics:
     
     # Overall metrics
     total_test_files: int = 0
-    test_frameworks: List[str] = None
-    languages: List[str] = None
+    test_frameworks: Optional[List[str]] = None
+    languages: Optional[List[str]] = None
     
     # Commit activity metrics
     total_commits: int = 0
@@ -58,7 +58,7 @@ class TestMetrics:
     has_automated_testing: bool = False
     has_security_scanning: bool = False
     has_deployment_automation: bool = False
-    cicd_workflows: List[str] = None
+    cicd_workflows: Optional[List[str]] = None
     
     # Status
     analysis_status: str = "pending"  # pending, success, partial, failed

@@ -15,16 +15,19 @@ import tempfile
 from pathlib import Path
 from datetime import datetime
 
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from models import TestMetrics
 from github_client import GitHubClient
 from analyzer import RepositoryAnalyzer
 from report_generator import ExcelReportGenerator
+from utils import load_env_file
 
 
 async def main():
     """Main execution flow"""
     # Load environment variables from .env file
-    from utils import load_env_file
     load_env_file()
     
     import argparse

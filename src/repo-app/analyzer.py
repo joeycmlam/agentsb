@@ -84,16 +84,16 @@ class RepositoryAnalyzer:
             await self._analyze_test_files(repo_path, metrics)
             
             # Extract coverage metrics
-            await self._extract_coverage(repo_path, metrics)
+            self._extract_coverage(repo_path, metrics)
             
             # Analyze commit activity
             await self._analyze_commit_activity(repo_path, metrics)
             
             # Detect CI/CD pipeline
-            await self._detect_cicd_pipeline(repo_path, metrics)
+            self._detect_cicd_pipeline(repo_path, metrics)
             
             metrics.analysis_status = "success"
-            print(f"   ✅ Analysis complete")
+            print("   ✅ Analysis complete")
             
         except Exception as e:
             metrics.analysis_status = "failed"
@@ -153,8 +153,8 @@ class RepositoryAnalyzer:
                     frameworks.append("Playwright")
                 if "cypress" in deps:
                     frameworks.append("Cypress")
-            except:
-                pass
+            except (json.JSONDecodeError, KeyError, IOError) as e:
+                print(f"   Warning: Failed to parse package.json: {e}")
         
         return frameworks
     
@@ -254,7 +254,42 @@ Classifications:"""
                 "prompt": prompt,
             }
             response = await self.copilot_session.send_and_wait(message_options, timeout=30.0)
+
+            # Log full response context for debugging
+            print("\n" + "="*80)
+            print("🔍 COPILOT RESPONSE DEBUG INFO")
+            print("="*80)
+            print(f"Response Type: {type(response)}")
+            print(f"Response: {response}")
             
+            # Log response attributes
+            if response:
+                print(f"\nResponse Attributes: {dir(response)}")
+                
+                # Log data object if exists
+                if hasattr(response, 'data'):
+                    print(f"\nResponse.data Type: {type(response.data)}")
+                    print(f"Response.data: {response.data}")
+                    print(f"Response.data Attributes: {dir(response.data)}")
+                    
+                    # Log content if exists
+                    if hasattr(response.data, 'content'):
+                        print(f"\nResponse.data.content Type: {type(response.data.content)}")
+                        print(f"Response.data.content Length: {len(response.data.content) if response.data.content else 0}")
+                        print(f"\nResponse.data.content:\n{response.data.content}")
+                    
+                    # Log other data attributes
+                    if hasattr(response.data, '__dict__'):
+                        print(f"\nResponse.data.__dict__: {response.data.__dict__}")
+                
+                # Log response dict if available
+                if hasattr(response, '__dict__'):
+                    print(f"\nResponse.__dict__: {response.__dict__}")
+            else:
+                print("⚠️  Response is None or falsy")
+            
+            print("="*80 + "\n")
+
             # Parse response
             classifications = []
             if response and hasattr(response, 'data') and hasattr(response.data, 'content'):
@@ -344,7 +379,7 @@ Classifications:"""
             total_scenarios += content.count("Scenario:") + content.count("Scenario Outline:")
         return total_scenarios
     
-    async def _extract_coverage(self, repo_path: Path, metrics: TestMetrics):
+    def _extract_coverage(self, repo_path: Path, metrics: TestMetrics):
         """Extract coverage from existing reports or run tests"""
         
         # Look for existing coverage reports
@@ -406,81 +441,64 @@ Classifications:"""
     async def _analyze_commit_activity(self, repo_path: Path, metrics: TestMetrics):
         """Analyze git commit history for activity metrics"""
         try:
-            loop = asyncio.get_event_loop()
-            
             # Total commits
-            result = await loop.run_in_executor(
-                None,
-                lambda: subprocess.run(
-                    ["git", "rev-list", "--count", "HEAD"],
-                    cwd=repo_path,
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
+            process = await asyncio.create_subprocess_exec(
+                "git", "rev-list", "--count", "HEAD",
+                cwd=repo_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
             )
-            if result.returncode == 0:
-                metrics.total_commits = int(result.stdout.strip())
+            stdout, _ = await process.communicate()
+            if process.returncode == 0:
+                metrics.total_commits = int(stdout.decode().strip())
             
             # Commits in last 30 days
-            result = await loop.run_in_executor(
-                None,
-                lambda: subprocess.run(
-                    ["git", "rev-list", "--count", "--since=30.days.ago", "HEAD"],
-                    cwd=repo_path,
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
+            process = await asyncio.create_subprocess_exec(
+                "git", "rev-list", "--count", "--since=30.days.ago", "HEAD",
+                cwd=repo_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
             )
-            if result.returncode == 0:
-                metrics.commits_last_30_days = int(result.stdout.strip())
+            stdout, _ = await process.communicate()
+            if process.returncode == 0:
+                metrics.commits_last_30_days = int(stdout.decode().strip())
             
             # Commits in last 90 days
-            result = await loop.run_in_executor(
-                None,
-                lambda: subprocess.run(
-                    ["git", "rev-list", "--count", "--since=90.days.ago", "HEAD"],
-                    cwd=repo_path,
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
+            process = await asyncio.create_subprocess_exec(
+                "git", "rev-list", "--count", "--since=90.days.ago", "HEAD",
+                cwd=repo_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
             )
-            if result.returncode == 0:
-                metrics.commits_last_90_days = int(result.stdout.strip())
+            stdout, _ = await process.communicate()
+            if process.returncode == 0:
+                metrics.commits_last_90_days = int(stdout.decode().strip())
             
             # Commits in last year
-            result = await loop.run_in_executor(
-                None,
-                lambda: subprocess.run(
-                    ["git", "rev-list", "--count", "--since=1.year.ago", "HEAD"],
-                    cwd=repo_path,
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
+            process = await asyncio.create_subprocess_exec(
+                "git", "rev-list", "--count", "--since=1.year.ago", "HEAD",
+                cwd=repo_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
             )
-            if result.returncode == 0:
-                metrics.commits_last_year = int(result.stdout.strip())
+            stdout, _ = await process.communicate()
+            if process.returncode == 0:
+                metrics.commits_last_year = int(stdout.decode().strip())
             
             # Average commits per week (based on last 90 days)
             if metrics.commits_last_90_days > 0:
                 metrics.avg_commits_per_week = round(metrics.commits_last_90_days / (90 / 7), 2)
             
             # Active contributors (last 90 days)
-            result = await loop.run_in_executor(
-                None,
-                lambda: subprocess.run(
-                    ["git", "shortlog", "-sn", "--since=90.days.ago", "HEAD"],
-                    cwd=repo_path,
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
+            process = await asyncio.create_subprocess_exec(
+                "git", "shortlog", "-sn", "--since=90.days.ago", "HEAD",
+                cwd=repo_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
             )
-            if result.returncode == 0:
-                contributors = [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
+            stdout, _ = await process.communicate()
+            if process.returncode == 0:
+                contributors = [line.strip() for line in stdout.decode().strip().split('\n') if line.strip()]
                 metrics.active_contributors = len(contributors)
             
             print(f"   📊 Commits: {metrics.total_commits} total, {metrics.commits_last_30_days} (30d), "
@@ -489,7 +507,7 @@ Classifications:"""
         except Exception as e:
             print(f"   ⚠️  Commit analysis failed: {e}")
     
-    async def _detect_cicd_pipeline(self, repo_path: Path, metrics: TestMetrics):
+    def _detect_cicd_pipeline(self, repo_path: Path, metrics: TestMetrics):
         """Detect CI/CD pipeline configuration and capabilities"""
         try:
             platforms_detected = []
@@ -500,37 +518,37 @@ Classifications:"""
                 workflow_files = list(gh_workflows.glob("*.yml")) + list(gh_workflows.glob("*.yaml"))
                 if workflow_files:
                     platforms_detected.append("GitHub Actions")
-                    await self._analyze_github_workflows(workflow_files, metrics)
+                    self._analyze_github_workflows(workflow_files, metrics)
             
             # GitLab CI
             gitlab_ci = repo_path / ".gitlab-ci.yml"
             if gitlab_ci.exists():
                 platforms_detected.append("GitLab CI")
-                await self._analyze_gitlab_ci(gitlab_ci, metrics)
+                self._analyze_gitlab_ci(gitlab_ci, metrics)
             
             # Jenkins
             jenkinsfile = repo_path / "Jenkinsfile"
             if jenkinsfile.exists():
                 platforms_detected.append("Jenkins")
-                await self._analyze_jenkinsfile(jenkinsfile, metrics)
+                self._analyze_jenkinsfile(jenkinsfile, metrics)
             
             # CircleCI
             circleci_config = repo_path / ".circleci" / "config.yml"
             if circleci_config.exists():
                 platforms_detected.append("CircleCI")
-                await self._analyze_circleci_config(circleci_config, metrics)
+                self._analyze_circleci_config(circleci_config, metrics)
             
             # Travis CI
             travis_config = repo_path / ".travis.yml"
             if travis_config.exists():
                 platforms_detected.append("Travis CI")
-                await self._analyze_travis_config(travis_config, metrics)
+                self._analyze_travis_config(travis_config, metrics)
             
             # Azure Pipelines
             azure_pipelines = repo_path / "azure-pipelines.yml"
             if azure_pipelines.exists():
                 platforms_detected.append("Azure Pipelines")
-                await self._analyze_azure_pipelines(azure_pipelines, metrics)
+                self._analyze_azure_pipelines(azure_pipelines, metrics)
             
             # Set CI/CD status
             if platforms_detected:
@@ -546,7 +564,7 @@ Classifications:"""
         except Exception as e:
             print(f"   ⚠️  CI/CD detection failed: {e}")
     
-    async def _analyze_github_workflows(self, workflow_files: List[Path], metrics: TestMetrics):
+    def _analyze_github_workflows(self, workflow_files: List[Path], metrics: TestMetrics):
         """Analyze GitHub Actions workflow files"""
         for workflow_file in workflow_files:
             try:
@@ -579,7 +597,7 @@ Classifications:"""
             except Exception as e:
                 print(f"   ⚠️  Failed to analyze workflow {workflow_file.name}: {e}")
     
-    async def _analyze_gitlab_ci(self, config_file: Path, metrics: TestMetrics):
+    def _analyze_gitlab_ci(self, config_file: Path, metrics: TestMetrics):
         """Analyze GitLab CI configuration"""
         try:
             content = config_file.read_text().lower()
@@ -600,7 +618,7 @@ Classifications:"""
         except Exception as e:
             print(f"   ⚠️  Failed to analyze GitLab CI: {e}")
     
-    async def _analyze_jenkinsfile(self, jenkinsfile: Path, metrics: TestMetrics):
+    def _analyze_jenkinsfile(self, jenkinsfile: Path, metrics: TestMetrics):
         """Analyze Jenkinsfile"""
         try:
             content = jenkinsfile.read_text().lower()
@@ -621,7 +639,7 @@ Classifications:"""
         except Exception as e:
             print(f"   ⚠️  Failed to analyze Jenkinsfile: {e}")
     
-    async def _analyze_circleci_config(self, config_file: Path, metrics: TestMetrics):
+    def _analyze_circleci_config(self, config_file: Path, metrics: TestMetrics):
         """Analyze CircleCI configuration"""
         try:
             content = config_file.read_text().lower()
@@ -642,7 +660,7 @@ Classifications:"""
         except Exception as e:
             print(f"   ⚠️  Failed to analyze CircleCI config: {e}")
     
-    async def _analyze_travis_config(self, config_file: Path, metrics: TestMetrics):
+    def _analyze_travis_config(self, config_file: Path, metrics: TestMetrics):
         """Analyze Travis CI configuration"""
         try:
             content = config_file.read_text().lower()
@@ -659,7 +677,7 @@ Classifications:"""
         except Exception as e:
             print(f"   ⚠️  Failed to analyze Travis CI config: {e}")
     
-    async def _analyze_azure_pipelines(self, config_file: Path, metrics: TestMetrics):
+    def _analyze_azure_pipelines(self, config_file: Path, metrics: TestMetrics):
         """Analyze Azure Pipelines configuration"""
         try:
             content = config_file.read_text().lower()
