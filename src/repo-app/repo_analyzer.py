@@ -22,6 +22,7 @@ from models import TestMetrics
 from github_client import GitHubClient
 from analyzer import RepositoryAnalyzer
 from report_generator import ExcelReportGenerator
+from markdown_report_generator import MarkdownReportGenerator
 from utils import load_env_file
 from logger import get_logger, set_log_level
 
@@ -42,6 +43,8 @@ async def main():
     parser.add_argument("--config", type=str, default="repo_list.json", help="Repository list config file")
     parser.add_argument("--output", type=str, default="test_analysis_report.xlsx", help="Output Excel file")
     parser.add_argument("--token", type=str, help="GitHub personal access token")
+    parser.add_argument("--recommendations", action="store_true", 
+                        help="Generate markdown testing recommendations for each repository")
     parser.add_argument("--log-level", type=str, default="INFO", 
                         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
                         help="Set logging level (default: INFO)")
@@ -118,7 +121,8 @@ async def main():
                 metrics = await analyzer.analyze_repository(
                     repo_path,
                     repo_config['name'],
-                    repo_config['url']
+                    repo_config['url'],
+                    generate_recommendations=args.recommendations
                 )
                 metrics_list.append(metrics)
             else:
@@ -139,6 +143,28 @@ async def main():
     report_generator = ExcelReportGenerator()
     report_generator.generate_report(metrics_list, output_file)
     
+    # Generate markdown recommendations if requested
+    if args.recommendations:
+        markdown_generator = MarkdownReportGenerator()
+        reports_dir = output_file.parent / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        
+        recommendations_count = 0
+        for metrics in metrics_list:
+            if metrics.recommendations:
+                # Generate filename from repo name
+                repo_name_safe = metrics.repo_name.replace('/', '_').replace(' ', '_')
+                markdown_file = reports_dir / f"{repo_name_safe}_recommendations.md"
+                
+                if markdown_generator.generate_report(metrics, markdown_file):
+                    recommendations_count += 1
+        
+        if recommendations_count > 0:
+            logger.info(f"📄 Generated {recommendations_count} recommendation report(s) in {reports_dir}")
+        else:
+            logger.warning("⚠️  No recommendations were generated (Copilot service may be unavailable)")
+    
+    # 
     # Summary
     logger.info("")
     logger.info("="*60)

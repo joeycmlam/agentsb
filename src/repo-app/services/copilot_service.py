@@ -103,6 +103,39 @@ class CopilotService:
             logger.debug(f"Copilot classification request failed: {e}")
             return []
     
+    async def send_prompt(self, prompt: str, timeout: float = 30.0) -> Optional[str]:
+        """
+        Send a general prompt to Copilot and get response.
+        
+        Args:
+            prompt: The prompt to send
+            timeout: Timeout in seconds
+            
+        Returns:
+            Response text or None if failed
+        """
+        if not self.copilot_client or not self._copilot_started:
+            return None
+        
+        try:
+            # Create session if needed
+            if not self.copilot_session:
+                self.copilot_session = await self.copilot_client.create_session()
+            
+            # Send request
+            message_options: MessageOptions = {"prompt": prompt}
+            response = await self.copilot_session.send_and_wait(message_options, timeout=timeout)
+            
+            # Extract text from response
+            if response and hasattr(response, 'data') and hasattr(response.data, 'content'):
+                return response.data.content
+            
+            return None
+            
+        except Exception as e:
+            get_logger().debug(f"Copilot prompt request failed: {e}")
+            return None
+    
     def _parse_classifications(self, response) -> List[dict]:
         """
         Parse test classifications from Copilot response.

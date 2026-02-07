@@ -18,6 +18,7 @@ from analyzers.test_analyzer import TestFileAnalyzer
 from analyzers.coverage_analyzer import CoverageAnalyzer
 from analyzers.git_analyzer import GitAnalyzer
 from analyzers.cicd_analyzer import CICDAnalyzer
+from analyzers.recommendation_analyzer import RecommendationAnalyzer
 
 
 class RepositoryAnalyzer:
@@ -44,9 +45,10 @@ class RepositoryAnalyzer:
         
         # Initialize specialized analyzers
         self.test_analyzer = TestFileAnalyzer(copilot_service=self.copilot_service)
-        self.coverage_analyzer = CoverageAnalyzer()
+        self.coverage_analyzer = CoverageAnalyzer(copilot_service=self.copilot_service)
         self.git_analyzer = GitAnalyzer()
         self.cicd_analyzer = CICDAnalyzer()
+        self.recommendation_analyzer = RecommendationAnalyzer(copilot_service=self.copilot_service)
     
     async def _init_copilot(self):
         """Initialize Copilot service"""
@@ -56,7 +58,8 @@ class RepositoryAnalyzer:
         """Clean up Copilot service"""
         await self.copilot_service.cleanup()
     
-    async def analyze_repository(self, repo_path: Path, repo_name: str, repo_url: str) -> TestMetrics:
+    async def analyze_repository(self, repo_path: Path, repo_name: str, repo_url: str, 
+                                 generate_recommendations: bool = False) -> TestMetrics:
         """
         Orchestrate complete repository analysis.
         
@@ -64,6 +67,7 @@ class RepositoryAnalyzer:
             repo_path: Path to repository root
             repo_name: Repository name
             repo_url: Repository URL
+            generate_recommendations: Whether to generate testing recommendations
             
         Returns:
             TestMetrics with analysis results
@@ -90,8 +94,21 @@ class RepositoryAnalyzer:
             
             # Delegate to specialized analyzers
             await self.test_analyzer.analyze_test_files(repo_path, metrics)
+            
+            # Generate coverage if needed (checks staleness internally)
+            try:
+                await self.coverage_analyzer.generate_coverage_if_needed(repo_path, metrics)
+            except Exception as e:
+                logger.warning(f"Coverage generation failed: {e}")
+            
+            # Extract coverage (uses generated or existing report)
             self.coverage_analyzer.extract_coverage(repo_path, metrics)
+            
             await self.git_analyzer.analyze_commit_activity(repo_path, metrics)
+            # Generate recommendations if requested
+            if generate_recommendations:
+                await self.recommendation_analyzer.generate_recommendations(repo_path, metrics)
+            
             self.cicd_analyzer.detect_cicd_pipeline(repo_path, metrics)
             
             metrics.analysis_status = "success"
