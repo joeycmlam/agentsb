@@ -23,10 +23,13 @@ from github_client import GitHubClient
 from analyzer import RepositoryAnalyzer
 from report_generator import ExcelReportGenerator
 from utils import load_env_file
+from logger import get_logger, set_log_level
 
 
 async def main():
     """Main execution flow"""
+    logger = get_logger()
+    
     # Load environment variables from .env file
     load_env_file()
     
@@ -39,8 +42,14 @@ async def main():
     parser.add_argument("--config", type=str, default="repo_list.json", help="Repository list config file")
     parser.add_argument("--output", type=str, default="test_analysis_report.xlsx", help="Output Excel file")
     parser.add_argument("--token", type=str, help="GitHub personal access token")
+    parser.add_argument("--log-level", type=str, default="INFO", 
+                        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                        help="Set logging level (default: INFO)")
     
     args = parser.parse_args()
+    
+    # Set log level
+    set_log_level(args.log_level)
     
     # Set token from environment or arg
     if args.token:
@@ -51,7 +60,7 @@ async def main():
     
     # Initialize repository list
     if args.init:
-        print("🔍 Fetching repository list from GitHub...")
+        logger.info("🔍 Fetching repository list from GitHub...")
         github_client = GitHubClient()
         
         if args.org:
@@ -75,20 +84,20 @@ async def main():
         }
         
         config_file.write_text(json.dumps(repo_config, indent=2))
-        print(f"✅ Saved {len(repos)} repositories to {config_file}")
-        print(f"\n📝 Edit {config_file} to enable/disable specific repositories")
+        logger.info(f"✅ Saved {len(repos)} repositories to {config_file}")
+        logger.info(f"📝 Edit {config_file} to enable/disable specific repositories")
         return
     
     # Load repository list
     if not config_file.exists():
-        print(f"❌ Config file not found: {config_file}")
-        print("Run with --init to create repository list")
+        logger.error(f"Config file not found: {config_file}")
+        logger.info("Run with --init to create repository list")
         sys.exit(1)
     
     config = json.loads(config_file.read_text())
     enabled_repos = [r for r in config["repositories"] if r.get("enabled", True)]
     
-    print(f"\n📋 Analyzing {len(enabled_repos)} repositories...")
+    logger.info(f"📋 Analyzing {len(enabled_repos)} repositories...")
     
     # Analyze each repository
     github_client = GitHubClient()
@@ -99,7 +108,7 @@ async def main():
         temp_path = Path(temp_dir)
         
         for idx, repo_config in enumerate(enabled_repos, start=1):
-            print(f"\n[{idx}/{len(enabled_repos)}] Processing: {repo_config['name']}")
+            logger.info(f"\n[{idx}/{len(enabled_repos)}] Processing: {repo_config['name']}")
             
             repo_path = temp_path / repo_config['name'].replace('/', '_')
             
@@ -131,13 +140,14 @@ async def main():
     report_generator.generate_report(metrics_list, output_file)
     
     # Summary
-    print("\n" + "="*60)
-    print("📊 ANALYSIS SUMMARY")
-    print("="*60)
-    print(f"Total repositories: {len(metrics_list)}")
-    print(f"Successful: {sum(1 for m in metrics_list if m.analysis_status == 'success')}")
-    print(f"Failed: {sum(1 for m in metrics_list if m.analysis_status == 'failed')}")
-    print(f"\n📄 Report: {output_file.absolute()}")
+    logger.info("")
+    logger.info("="*60)
+    logger.info("📊 ANALYSIS SUMMARY")
+    logger.info("="*60)
+    logger.info(f"Total repositories: {len(metrics_list)}")
+    logger.info(f"Successful: {sum(1 for m in metrics_list if m.analysis_status == 'success')}")
+    logger.info(f"Failed: {sum(1 for m in metrics_list if m.analysis_status == 'failed')}")
+    logger.info(f"📄 Report: {output_file.absolute()}")
 
 
 if __name__ == "__main__":

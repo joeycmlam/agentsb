@@ -14,7 +14,7 @@ from typing import List
 from datetime import datetime
 
 from models import TestMetrics
-
+from logger import get_logger, log_repo_analysis_start, log_repo_analysis_end, log_metric, log_section
 
 # GitHub Copilot SDK imports
 try:
@@ -36,19 +36,21 @@ class RepositoryAnalyzer:
     
     async def _init_copilot(self):
         """Async initialization of Copilot client"""
+        logger = get_logger()
         if self.use_copilot and not self._copilot_started:
             try:
                 self.copilot_client = CopilotClient()
                 await self.copilot_client.start()
                 self._copilot_started = True
-                print("   🤖 GitHub Copilot SDK initialized")
+                logger.info("   🤖 GitHub Copilot SDK initialized")
             except Exception as e:
-                print(f"   ⚠️  Copilot SDK initialization failed: {e}")
+                logger.warning(f"Copilot SDK initialization failed: {e}")
                 self.use_copilot = False
                 self.copilot_client = None
     
     async def _cleanup_copilot(self):
         """Async cleanup of Copilot client"""
+        logger = get_logger()
         if self.copilot_client and self._copilot_started:
             try:
                 if self.copilot_session:
@@ -57,11 +59,12 @@ class RepositoryAnalyzer:
                 await self.copilot_client.stop()
                 self._copilot_started = False
             except Exception as e:
-                print(f"   ⚠️  Copilot cleanup error: {e}")
+                logger.warning(f"Copilot cleanup error: {e}")
     
     async def analyze_repository(self, repo_path: Path, repo_name: str, repo_url: str) -> TestMetrics:
         """Analyze a repository and return test metrics"""
-        print(f"\n📊 Analyzing: {repo_name}")
+        logger = get_logger()
+        log_repo_analysis_start(repo_name)
         
         # Initialize Copilot if needed
         await self._init_copilot()
@@ -77,8 +80,8 @@ class RepositoryAnalyzer:
             metrics.languages = self._detect_languages(repo_path)
             metrics.test_frameworks = self._detect_test_frameworks(repo_path)
             
-            print(f"   Languages: {', '.join(metrics.languages)}")
-            print(f"   Frameworks: {', '.join(metrics.test_frameworks)}")
+            log_metric("Languages", ', '.join(metrics.languages))
+            log_metric("Frameworks", ', '.join(metrics.test_frameworks))
             
             # Analyze test files
             await self._analyze_test_files(repo_path, metrics)
@@ -93,12 +96,13 @@ class RepositoryAnalyzer:
             self._detect_cicd_pipeline(repo_path, metrics)
             
             metrics.analysis_status = "success"
-            print("   ✅ Analysis complete")
+            log_repo_analysis_end(repo_name, True)
             
         except Exception as e:
             metrics.analysis_status = "failed"
             metrics.error_message = str(e)
-            print(f"   ❌ Analysis failed: {e}")
+            logger.error(f"Analysis failed: {e}", exc_info=True)
+            log_repo_analysis_end(repo_name, False)
         
         return metrics
     
@@ -154,7 +158,7 @@ class RepositoryAnalyzer:
                 if "cypress" in deps:
                     frameworks.append("Cypress")
             except (json.JSONDecodeError, KeyError, IOError) as e:
-                print(f"   Warning: Failed to parse package.json: {e}")
+                get_logger().debug(f"Failed to parse package.json: {e}")
         
         return frameworks
     
@@ -189,12 +193,13 @@ class RepositoryAnalyzer:
     
     async def _analyze_with_copilot(self, test_files: List[Path], metrics: TestMetrics):
         """Use GitHub Copilot SDK to intelligently classify tests"""
+        logger = get_logger()
         if not self.copilot_client:
-            print("   📝 Copilot not available, using pattern-based analysis...")
+            logger.debug("Copilot not available, using pattern-based analysis")
             self._analyze_with_patterns(test_files, metrics)
             return
         
-        print("   🤖 Using Copilot SDK for intelligent test classification...")
+        logger.info("   🤖 Using Copilot SDK for intelligent test classification")
         
         try:
             # Create a new session for this analysis
@@ -212,8 +217,9 @@ class RepositoryAnalyzer:
                 self.copilot_session = None
                 
         except Exception as e:
-            print(f"   ⚠️  Copilot analysis failed: {e}")
-            print("   📝 Falling back to pattern-based analysis...")
+            logger = get_logger()
+            logger.warning(f"Copilot analysis failed: {e}")
+            logger.debug("Falling back to pattern-based analysis")
             self._analyze_with_patterns(test_files, metrics)
     
     async def _classify_batch_with_copilot(self, test_files: List[Path], metrics: TestMetrics):
@@ -332,13 +338,15 @@ Classifications:"""
         
         except Exception as e:
             # If Copilot fails, fall back to pattern matching for all files
-            print(f"   ⚠️  Copilot classification failed: {e}")
+            logger = get_logger()
+            logger.warning(f"Copilot classification failed: {e}")
             for test_file in test_files:
                 self._classify_by_pattern(test_file, metrics)
     
     def _analyze_with_patterns(self, test_files: List[Path], metrics: TestMetrics):
         """Fallback: Pattern-based test classification"""
-        print("   📝 Using pattern-based analysis...")
+        logger = get_logger()
+        logger.debug("Using pattern-based analysis")
         
         for test_file in test_files:
             self._classify_by_pattern(test_file, metrics)
@@ -381,6 +389,7 @@ Classifications:"""
     
     def _extract_coverage(self, repo_path: Path, metrics: TestMetrics):
         """Extract coverage from existing reports or run tests"""
+        logger = get_logger()
         
         # Look for existing coverage reports
         coverage_found = False
@@ -398,7 +407,7 @@ Classifications:"""
             self._parse_js_coverage_json(coverage_summary, metrics)
         
         if not coverage_found:
-            print("   ⚠️  No existing coverage reports found")
+            logger.debug("No existing coverage reports found")
     
     def _parse_python_coverage_xml(self, coverage_file: Path, metrics: TestMetrics):
         """Parse Python coverage.xml file"""
@@ -419,9 +428,9 @@ Classifications:"""
                 metrics.unit_test_lines_covered = lines_covered
                 metrics.unit_test_lines_total = lines_valid
             
-            print(f"   📈 Python Coverage: {metrics.unit_test_coverage_pct:.1f}%")
+            log_metric("Python Coverage", f"{metrics.unit_test_coverage_pct:.1f}%")
         except Exception as e:
-            print(f"   ⚠️  Failed to parse coverage.xml: {e}")
+            get_logger().warning(f"Failed to parse coverage.xml: {e}")
     
     def _parse_js_coverage_json(self, coverage_file: Path, metrics: TestMetrics):
         """Parse JavaScript coverage-summary.json"""
@@ -434,9 +443,9 @@ Classifications:"""
             metrics.unit_test_lines_covered = lines.get("covered", 0)
             metrics.unit_test_lines_total = lines.get("total", 0)
             
-            print(f"   📈 JS Coverage: {metrics.unit_test_coverage_pct:.1f}%")
+            log_metric("JS Coverage", f"{metrics.unit_test_coverage_pct:.1f}%")
         except Exception as e:
-            print(f"   ⚠️  Failed to parse coverage-summary.json: {e}")
+            get_logger().warning(f"Failed to parse coverage-summary.json: {e}")
     
     async def _analyze_commit_activity(self, repo_path: Path, metrics: TestMetrics):
         """Analyze git commit history for activity metrics"""
@@ -501,11 +510,11 @@ Classifications:"""
                 contributors = [line.strip() for line in stdout.decode().strip().split('\n') if line.strip()]
                 metrics.active_contributors = len(contributors)
             
-            print(f"   📊 Commits: {metrics.total_commits} total, {metrics.commits_last_30_days} (30d), "
-                  f"{metrics.avg_commits_per_week}/week avg, {metrics.active_contributors} contributors")
+            log_metric("Commits", f"{metrics.total_commits} total, {metrics.commits_last_30_days} (30d), "
+                       f"{metrics.avg_commits_per_week}/week avg, {metrics.active_contributors} contributors")
             
         except Exception as e:
-            print(f"   ⚠️  Commit analysis failed: {e}")
+            get_logger().warning(f"Commit analysis failed: {e}")
     
     def _detect_cicd_pipeline(self, repo_path: Path, metrics: TestMetrics):
         """Detect CI/CD pipeline configuration and capabilities"""
@@ -551,18 +560,19 @@ Classifications:"""
                 self._analyze_azure_pipelines(azure_pipelines, metrics)
             
             # Set CI/CD status
+            logger = get_logger()
             if platforms_detected:
                 metrics.has_cicd_pipeline = True
                 metrics.cicd_platform = ", ".join(platforms_detected)
-                print(f"   🔧 CI/CD: {metrics.cicd_platform}")
-                print(f"      - Automated Testing: {'✅' if metrics.has_automated_testing else '❌'}")
-                print(f"      - Security Scanning: {'✅' if metrics.has_security_scanning else '❌'}")
-                print(f"      - Deployment: {'✅' if metrics.has_deployment_automation else '❌'}")
+                log_metric("CI/CD", metrics.cicd_platform)
+                logger.info(f"      - Automated Testing: {'✅' if metrics.has_automated_testing else '❌'}")
+                logger.info(f"      - Security Scanning: {'✅' if metrics.has_security_scanning else '❌'}")
+                logger.info(f"      - Deployment: {'✅' if metrics.has_deployment_automation else '❌'}")
             else:
-                print("   🔧 CI/CD: Not detected")
+                log_metric("CI/CD", "Not detected")
             
         except Exception as e:
-            print(f"   ⚠️  CI/CD detection failed: {e}")
+            get_logger().warning(f"CI/CD detection failed: {e}")
     
     def _analyze_github_workflows(self, workflow_files: List[Path], metrics: TestMetrics):
         """Analyze GitHub Actions workflow files"""
@@ -595,7 +605,7 @@ Classifications:"""
                     metrics.has_deployment_automation = True
                 
             except Exception as e:
-                print(f"   ⚠️  Failed to analyze workflow {workflow_file.name}: {e}")
+                get_logger().debug(f"Failed to analyze workflow {workflow_file.name}: {e}")
     
     def _analyze_gitlab_ci(self, config_file: Path, metrics: TestMetrics):
         """Analyze GitLab CI configuration"""
@@ -616,7 +626,7 @@ Classifications:"""
                 metrics.has_deployment_automation = True
                 
         except Exception as e:
-            print(f"   ⚠️  Failed to analyze GitLab CI: {e}")
+            get_logger().debug(f"Failed to analyze GitLab CI: {e}")
     
     def _analyze_jenkinsfile(self, jenkinsfile: Path, metrics: TestMetrics):
         """Analyze Jenkinsfile"""
@@ -637,7 +647,7 @@ Classifications:"""
                 metrics.has_deployment_automation = True
                 
         except Exception as e:
-            print(f"   ⚠️  Failed to analyze Jenkinsfile: {e}")
+            get_logger().debug(f"Failed to analyze Jenkinsfile: {e}")
     
     def _analyze_circleci_config(self, config_file: Path, metrics: TestMetrics):
         """Analyze CircleCI configuration"""
@@ -658,7 +668,7 @@ Classifications:"""
                 metrics.has_deployment_automation = True
                 
         except Exception as e:
-            print(f"   ⚠️  Failed to analyze CircleCI config: {e}")
+            get_logger().debug(f"Failed to analyze CircleCI config: {e}")
     
     def _analyze_travis_config(self, config_file: Path, metrics: TestMetrics):
         """Analyze Travis CI configuration"""
@@ -675,7 +685,7 @@ Classifications:"""
                 metrics.has_deployment_automation = True
                 
         except Exception as e:
-            print(f"   ⚠️  Failed to analyze Travis CI config: {e}")
+            get_logger().debug(f"Failed to analyze Travis CI config: {e}")
     
     def _analyze_azure_pipelines(self, config_file: Path, metrics: TestMetrics):
         """Analyze Azure Pipelines configuration"""
@@ -696,4 +706,4 @@ Classifications:"""
                 metrics.has_deployment_automation = True
                 
         except Exception as e:
-            print(f"   ⚠️  Failed to analyze Azure Pipelines: {e}")
+            get_logger().debug(f"Failed to analyze Azure Pipelines: {e}")
