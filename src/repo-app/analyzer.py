@@ -6,6 +6,7 @@ Date: February 2026
 """
 
 import json
+import logging
 import re
 import asyncio
 import subprocess
@@ -107,25 +108,31 @@ class RepositoryAnalyzer:
         return metrics
     
     def _detect_languages(self, repo_path: Path) -> List[str]:
-        """Detect programming languages in repository"""
+        """Detect programming languages in repository with optimized single scan"""
+        from collections import defaultdict
+        
+        # Count file extensions in a single filesystem scan
+        extension_count = defaultdict(int)
+        for file_path in repo_path.rglob("*.*"):
+            ext = file_path.suffix.lower()
+            extension_count[ext] += 1
+        
+        # Map extensions to languages
         languages = []
         
-        # Python
-        if list(repo_path.rglob("*.py")):
+        if extension_count['.py'] > 0:
             languages.append("Python")
         
-        # JavaScript/TypeScript
-        if list(repo_path.rglob("*.js")) or list(repo_path.rglob("*.jsx")):
+        if extension_count['.js'] > 0 or extension_count['.jsx'] > 0:
             languages.append("JavaScript")
-        if list(repo_path.rglob("*.ts")) or list(repo_path.rglob("*.tsx")):
+        
+        if extension_count['.ts'] > 0 or extension_count['.tsx'] > 0:
             languages.append("TypeScript")
         
-        # Java
-        if list(repo_path.rglob("*.java")):
+        if extension_count['.java'] > 0:
             languages.append("Java")
         
-        # Go
-        if list(repo_path.rglob("*.go")):
+        if extension_count['.go'] > 0:
             languages.append("Go")
         
         return languages
@@ -222,12 +229,8 @@ class RepositoryAnalyzer:
             logger.debug("Falling back to pattern-based analysis")
             self._analyze_with_patterns(test_files, metrics)
     
-    async def _classify_batch_with_copilot(self, test_files: List[Path], metrics: TestMetrics):
-        """Classify a batch of test files using Copilot"""
-        if not self.copilot_session:
-            return
-        
-        # Prepare file information for analysis
+    def _prepare_file_info_for_copilot(self, test_files: List[Path]) -> List[dict]:
+        """Prepare file information for Copilot analysis"""
         file_info = []
         for test_file in test_files:
             try:
@@ -237,14 +240,14 @@ class RepositoryAnalyzer:
                     "name": test_file.name,
                     "preview": content
                 })
-            except Exception:
+            except Exception as e:
+                get_logger().debug(f"Failed to read {test_file.name}: {e}")
                 continue
-        
-        if not file_info:
-            return
-        
-        # Build prompt for Copilot
-        prompt = f"""Analyze these test files and classify each as one of: unit, integration, e2e, performance, or smoke test.
+        return file_info
+    
+    def _build_copilot_classification_prompt(self, file_info: List[dict]) -> str:
+        """Build prompt for Copilot test classification"""
+        return f"""Analyze these test files and classify each as one of: unit, integration, e2e, performance, or smoke test.
 
 For each file, respond with the format: "filename: type"
 
@@ -252,89 +255,119 @@ Files to analyze:
 {json.dumps(file_info, indent=2)}
 
 Classifications:"""
+    
+    def _log_copilot_response_debug(self, response):
+        """Log Copilot response details for debugging"""
+        logger = get_logger()
+        if not logger.isEnabledFor(logging.DEBUG):
+            return
         
-        # Send to Copilot and wait for response
+        logger.debug("="*80)
+        logger.debug("COPILOT RESPONSE DEBUG INFO")
+        logger.debug("="*80)
+        logger.debug(f"Response Type: {type(response)}")
+        logger.debug(f"Response: {response}")
+        
+        if response:
+            logger.debug(f"Response Attributes: {dir(response)}")
+            
+            if hasattr(response, 'data'):
+                logger.debug(f"Response.data Type: {type(response.data)}")
+                logger.debug(f"Response.data: {response.data}")
+                
+                if hasattr(response.data, 'content'):
+                    content_len = len(response.data.content) if response.data.content else 0
+                    logger.debug(f"Response.data.content Length: {content_len}")
+                    logger.debug(f"Response.data.content: {response.data.content}")
+        else:
+            logger.debug("Response is None or falsy")
+        
+        logger.debug("="*80)
+    
+    def _parse_copilot_classifications(self, response) -> List[dict]:
+        """Parse test classifications from Copilot response"""
+        classifications = []
+        
+        if not response:
+            return classifications
+        
+        if not hasattr(response, 'data') or not hasattr(response.data, 'content'):
+            return classifications
+        
+        content = response.data.content
+        if not content:
+            return classifications
+        
+        # Extract classifications from response
+        for line in content.split('\n'):
+            # Look for patterns like "file.py: unit" or "file.py -> e2e"
+            match = re.search(r'([^:]+):\s*(unit|integration|e2e|performance|smoke)', line, re.IGNORECASE)
+            if match:
+                classifications.append({
+                    "file": match.group(1).strip(),
+                    "type": match.group(2).lower()
+                })
+        
+        return classifications
+    
+    def _apply_classifications_to_metrics(self, classifications: List[dict], metrics: TestMetrics):
+        """Apply test classifications to metrics object"""
+        for classification in classifications:
+            test_type = classification["type"]
+            count = 1  # Assume 1 test per file
+            
+            if test_type == "e2e":
+                metrics.e2e_test_count += count
+                metrics.e2e_test_files += 1
+            elif test_type == "performance":
+                metrics.performance_test_count += count
+                metrics.performance_test_files += 1
+            elif test_type == "smoke":
+                metrics.smoke_test_count += count
+                metrics.smoke_test_files += 1
+            elif test_type == "integration":
+                metrics.unit_test_count += count  # Count as unit for now
+            else:  # unit
+                metrics.unit_test_count += count
+    
+    def _classify_unmatched_files(self, test_files: List[Path], classifications: List[dict], metrics: TestMetrics):
+        """Classify files not matched by Copilot using pattern matching"""
+        classified_files = {c["file"] for c in classifications}
+        
+        for test_file in test_files:
+            if str(test_file) not in classified_files and test_file.name not in classified_files:
+                self._classify_by_pattern(test_file, metrics)
+    
+    async def _classify_batch_with_copilot(self, test_files: List[Path], metrics: TestMetrics):
+        """Classify a batch of test files using Copilot (refactored for lower complexity)"""
+        if not self.copilot_session:
+            return
+        
+        # Step 1: Prepare file information
+        file_info = self._prepare_file_info_for_copilot(test_files)
+        if not file_info:
+            return
+        
+        # Step 2: Send request to Copilot
         try:
             from copilot.types import MessageOptions
-            message_options: MessageOptions = {
-                "prompt": prompt,
-            }
+            
+            prompt = self._build_copilot_classification_prompt(file_info)
+            message_options: MessageOptions = {"prompt": prompt}
+            
             response = await self.copilot_session.send_and_wait(message_options, timeout=30.0)
-
-            # Log full response context for debugging
-            print("\n" + "="*80)
-            print("🔍 COPILOT RESPONSE DEBUG INFO")
-            print("="*80)
-            print(f"Response Type: {type(response)}")
-            print(f"Response: {response}")
             
-            # Log response attributes
-            if response:
-                print(f"\nResponse Attributes: {dir(response)}")
-                
-                # Log data object if exists
-                if hasattr(response, 'data'):
-                    print(f"\nResponse.data Type: {type(response.data)}")
-                    print(f"Response.data: {response.data}")
-                    print(f"Response.data Attributes: {dir(response.data)}")
-                    
-                    # Log content if exists
-                    if hasattr(response.data, 'content'):
-                        print(f"\nResponse.data.content Type: {type(response.data.content)}")
-                        print(f"Response.data.content Length: {len(response.data.content) if response.data.content else 0}")
-                        print(f"\nResponse.data.content:\n{response.data.content}")
-                    
-                    # Log other data attributes
-                    if hasattr(response.data, '__dict__'):
-                        print(f"\nResponse.data.__dict__: {response.data.__dict__}")
-                
-                # Log response dict if available
-                if hasattr(response, '__dict__'):
-                    print(f"\nResponse.__dict__: {response.__dict__}")
-            else:
-                print("⚠️  Response is None or falsy")
+            # Step 3: Log response for debugging
+            self._log_copilot_response_debug(response)
             
-            print("="*80 + "\n")
-
-            # Parse response
-            classifications = []
-            if response and hasattr(response, 'data') and hasattr(response.data, 'content'):
-                content = response.data.content
-                # Extract classifications from response
-                if content:  # Ensure content is not None
-                    for line in content.split('\n'):
-                        # Look for patterns like "file.py: unit" or "file.py -> e2e"
-                        match = re.search(r'([^:]+):\s*(unit|integration|e2e|performance|smoke)', line, re.IGNORECASE)
-                        if match:
-                            classifications.append({
-                                "file": match.group(1).strip(),
-                                "type": match.group(2).lower()
-                            })
+            # Step 4: Parse classifications
+            classifications = self._parse_copilot_classifications(response)
             
-            # Process classifications
-            for classification in classifications:
-                test_type = classification["type"]
-                count = 1  # Assume 1 test per file, could be improved
-                
-                if test_type == "e2e":
-                    metrics.e2e_test_count += count
-                    metrics.e2e_test_files += 1
-                elif test_type == "performance":
-                    metrics.performance_test_count += count
-                    metrics.performance_test_files += 1
-                elif test_type == "smoke":
-                    metrics.smoke_test_count += count
-                    metrics.smoke_test_files += 1
-                elif test_type == "integration":
-                    metrics.unit_test_count += count  # Count as unit for now
-                else:  # unit
-                    metrics.unit_test_count += count
+            # Step 5: Apply classifications to metrics
+            self._apply_classifications_to_metrics(classifications, metrics)
             
-            # For files not classified by Copilot, fall back to pattern matching
-            classified_files = {c["file"] for c in classifications}
-            for test_file in test_files:
-                if str(test_file) not in classified_files and test_file.name not in classified_files:
-                    self._classify_by_pattern(test_file, metrics)
+            # Step 6: Handle unclassified files
+            self._classify_unmatched_files(test_files, classifications, metrics)
         
         except Exception as e:
             # If Copilot fails, fall back to pattern matching for all files
