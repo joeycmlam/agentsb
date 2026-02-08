@@ -96,8 +96,20 @@ class CoverageAnalyzer:
             # Execute coverage command
             success, _, stderr = await self._execute_coverage_command(command, repo_path)
             
-            if success:
-                logger.info("   ✅ Coverage generated successfully")
+            # Check if coverage files were actually generated, even if exit code was non-zero
+            # (deprecation warnings can cause non-zero exit codes but still generate coverage)
+            coverage_generated = self._check_coverage_files_exist(repo_path)
+            
+            if coverage_generated:
+                if not success and stderr:
+                    # Coverage was generated but there were warnings
+                    logger.info("   ✅ Coverage generated with warnings")
+                    if "PytestDeprecationWarning" in stderr or "asyncio_default_fixture_loop_scope" in stderr:
+                        logger.debug("   ℹ️  pytest-asyncio deprecation warning detected (non-critical)")
+                    else:
+                        logger.debug(f"   ⚠️  Warnings during generation: {stderr[:200]}")
+                else:
+                    logger.info("   ✅ Coverage generated successfully")
                 log_metric(COVERAGE_SOURCE_METRIC, "Generated")
                 metrics.coverage_generated = True
                 return True
@@ -149,6 +161,28 @@ class CoverageAnalyzer:
         except Exception as e:
             logger.debug(f"Error checking coverage staleness: {e}")
             return True
+    
+    def _check_coverage_files_exist(self, repo_path: Path) -> bool:
+        """
+        Check if coverage files were generated.
+        
+        Args:
+            repo_path: Path to repository root
+            
+        Returns:
+            True if any coverage files exist
+        """
+        coverage_files = [
+            repo_path / "coverage.xml",
+            repo_path / ".coverage",
+            repo_path / "coverage" / "coverage-final.json",
+            repo_path / "coverage" / "coverage-summary.json"
+        ]
+        
+        for coverage_file in coverage_files:
+            if coverage_file.exists():
+                return True
+        return False
     
     async def _determine_coverage_command(self, repo_path: Path, metrics: TestMetrics) -> Optional[str]:
         """
@@ -205,7 +239,8 @@ Examples:
         
         # Python patterns
         if 'pytest' in frameworks_lower:
-            return "coverage run -m pytest -o asyncio_default_fixture_loop_scope=function && coverage xml"
+            # Set asyncio_default_fixture_loop_scope and suppress deprecation warnings
+            return "coverage run -m pytest -o asyncio_default_fixture_loop_scope=function -W ignore::DeprecationWarning::pytest_asyncio && coverage xml"
         elif any(f in frameworks_lower for f in ['unittest', 'python']):
             return "coverage run -m unittest discover && coverage xml"
         
