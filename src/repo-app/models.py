@@ -46,6 +46,7 @@ class TestMetrics:
     
     # Coverage generation metadata
     coverage_generated: bool = False
+    coverage_report_path: Optional[str] = None
     
     # Commit activity metrics
     total_commits: int = 0

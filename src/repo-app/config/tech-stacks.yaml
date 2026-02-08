@@ -1,0 +1,472 @@
+# Tech Stack Configuration
+# This file defines language detection rules, test frameworks, coverage tools, and test patterns
+# Used by the repository analyzer to support multiple programming languages and tech stacks
+
+languages:
+  # Python
+  - name: Python
+    extensions:
+      - .py
+    package_files:
+      - requirements.txt
+      - pyproject.toml
+      - setup.py
+      - Pipfile
+      - setup.cfg
+    frameworks:
+      - name: pytest
+        indicators:
+          - file: requirements.txt
+            pattern: "pytest"
+          - file: pyproject.toml
+            pattern: "pytest"
+          - file: setup.py
+            pattern: "pytest"
+        test_patterns:
+          - "test_*.py"
+          - "*_test.py"
+          - "tests/**/*.py"
+          - "test/**/*.py"
+        coverage_command: "coverage run -m pytest -o asyncio_default_fixture_loop_scope=function && coverage xml"
+        
+      - name: pytest-bdd
+        indicators:
+          - file: requirements.txt
+            pattern: "pytest-bdd"
+          - file: pyproject.toml
+            pattern: "pytest-bdd"
+        test_patterns:
+          - "features/**/*.feature"
+          - "tests/**/*.feature"
+          - "test/**/*steps.py"
+        coverage_command: "coverage run -m pytest -o asyncio_default_fixture_loop_scope=function && coverage xml"
+        
+      - name: unittest
+        indicators:
+          - file: "**/*.py"
+            pattern: "import unittest|from unittest"
+        test_patterns:
+          - "test*.py"
+          - "tests/**/*.py"
+        coverage_command: "coverage run -m unittest discover && coverage xml"
+
+  # JavaScript
+  - name: JavaScript
+    extensions:
+      - .js
+      - .jsx
+      - .mjs
+      - .cjs
+    package_files:
+      - package.json
+      - package-lock.json
+      - yarn.lock
+    frameworks:
+      - name: Jest
+        indicators:
+          - file: package.json
+            pattern: '"jest"'
+        test_patterns:
+          - "**/*.test.js"
+          - "**/*.test.jsx"
+          - "**/*.spec.js"
+          - "**/*.spec.jsx"
+          - "__tests__/**/*.js"
+        coverage_command: "npm test -- --coverage"
+        
+      - name: Mocha
+        indicators:
+          - file: package.json
+            pattern: '"mocha"'
+        test_patterns:
+          - "test/**/*.js"
+          - "**/*.test.js"
+          - "**/*.spec.js"
+        coverage_command: "nyc npm test"
+        
+      - name: Jasmine
+        indicators:
+          - file: package.json
+            pattern: '"jasmine"'
+        test_patterns:
+          - "spec/**/*.js"
+          - "**/*.spec.js"
+        coverage_command: "nyc jasmine"
+
+  # TypeScript
+  - name: TypeScript
+    extensions:
+      - .ts
+      - .tsx
+    package_files:
+      - package.json
+      - tsconfig.json
+    frameworks:
+      - name: Jest
+        indicators:
+          - file: package.json
+            pattern: '"jest"'
+          - file: package.json
+            pattern: '"ts-jest"'
+        test_patterns:
+          - "**/*.test.ts"
+          - "**/*.test.tsx"
+          - "**/*.spec.ts"
+          - "**/*.spec.tsx"
+          - "__tests__/**/*.ts"
+        coverage_command: "npm test -- --coverage"
+        
+      - name: Vitest
+        indicators:
+          - file: package.json
+            pattern: '"vitest"'
+        test_patterns:
+          - "**/*.test.ts"
+          - "**/*.test.tsx"
+          - "**/*.spec.ts"
+          - "**/*.spec.tsx"
+        coverage_command: "vitest run --coverage"
+        
+      - name: Playwright
+        indicators:
+          - file: package.json
+            pattern: '"@playwright/test"'
+          - file: playwright.config.ts
+            pattern: ""
+        test_patterns:
+          - "**/*.spec.ts"
+          - "e2e/**/*.ts"
+          - "tests/**/*.spec.ts"
+        coverage_command: "npx playwright test --reporter=html"
+        
+      - name: Cypress
+        indicators:
+          - file: package.json
+            pattern: '"cypress"'
+          - file: cypress.config.ts
+            pattern: ""
+        test_patterns:
+          - "cypress/e2e/**/*.cy.ts"
+          - "cypress/integration/**/*.spec.ts"
+        coverage_command: "cypress run --coverage"
+
+  # Ruby
+  - name: Ruby
+    extensions:
+      - .rb
+    package_files:
+      - Gemfile
+      - Gemfile.lock
+      - .gemspec
+    frameworks:
+      - name: RSpec
+        indicators:
+          - file: Gemfile
+            pattern: "rspec"
+          - file: .rspec
+            pattern: ""
+        test_patterns:
+          - "spec/**/*_spec.rb"
+          - "**/*_spec.rb"
+        coverage_command: "bundle exec rspec --format documentation"
+        
+      - name: Minitest
+        indicators:
+          - file: Gemfile
+            pattern: "minitest"
+          - file: "**/*.rb"
+            pattern: "require ['']minitest"
+        test_patterns:
+          - "test/**/*_test.rb"
+          - "**/*_test.rb"
+        coverage_command: "bundle exec rake test"
+        
+      - name: Cucumber
+        indicators:
+          - file: Gemfile
+            pattern: "cucumber"
+        test_patterns:
+          - "features/**/*.feature"
+          - "features/**/*_steps.rb"
+        coverage_command: "bundle exec cucumber"
+
+  # Java
+  - name: Java
+    extensions:
+      - .java
+    package_files:
+      - pom.xml
+      - build.gradle
+      - build.gradle.kts
+      - settings.gradle
+    frameworks:
+      - name: JUnit 5
+        indicators:
+          - file: pom.xml
+            pattern: "junit-jupiter"
+          - file: build.gradle
+            pattern: "junit-jupiter"
+        test_patterns:
+          - "src/test/**/*Test.java"
+          - "src/test/**/*Tests.java"
+          - "**/*Test.java"
+        coverage_command: "mvn test jacoco:report"
+        
+      - name: JUnit 4
+        indicators:
+          - file: pom.xml
+            pattern: "junit-4|<artifactId>junit</artifactId>"
+          - file: build.gradle
+            pattern: "junit:junit"
+        test_patterns:
+          - "src/test/**/*Test.java"
+          - "**/*Test.java"
+        coverage_command: "mvn test jacoco:report"
+        
+      - name: TestNG
+        indicators:
+          - file: pom.xml
+            pattern: "testng"
+          - file: build.gradle
+            pattern: "testng"
+        test_patterns:
+          - "src/test/**/*Test.java"
+          - "**/*Test.java"
+        coverage_command: "mvn test"
+        
+      - name: Spock
+        indicators:
+          - file: build.gradle
+            pattern: "spock-core"
+          - file: pom.xml
+            pattern: "spock-core"
+        test_patterns:
+          - "src/test/**/*Spec.groovy"
+          - "**/*Spec.groovy"
+        coverage_command: "gradle test"
+
+  # Go
+  - name: Go
+    extensions:
+      - .go
+    package_files:
+      - go.mod
+      - go.sum
+    frameworks:
+      - name: go test
+        indicators:
+          - file: "**/*_test.go"
+            pattern: "package.*_test|func Test"
+        test_patterns:
+          - "**/*_test.go"
+        coverage_command: "go test -v -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html"
+        
+      - name: Ginkgo
+        indicators:
+          - file: go.mod
+            pattern: "github.com/onsi/ginkgo"
+        test_patterns:
+          - "**/*_suite_test.go"
+          - "**/*_test.go"
+        coverage_command: "ginkgo -r --cover --coverprofile=coverage.out"
+        
+      - name: Testify
+        indicators:
+          - file: go.mod
+            pattern: "github.com/stretchr/testify"
+        test_patterns:
+          - "**/*_test.go"
+        coverage_command: "go test -v -coverprofile=coverage.out ./..."
+
+  # C#
+  - name: "C#"
+    extensions:
+      - .cs
+      - .csx
+    package_files:
+      - "*.csproj"
+      - "*.sln"
+      - packages.config
+    frameworks:
+      - name: xUnit
+        indicators:
+          - file: "*.csproj"
+            pattern: "xunit"
+        test_patterns:
+          - "**/*Tests.cs"
+          - "**/*Test.cs"
+          - "**/Test*.cs"
+        coverage_command: "dotnet test --collect:\"XPlat Code Coverage\""
+        
+      - name: NUnit
+        indicators:
+          - file: "*.csproj"
+            pattern: "NUnit"
+        test_patterns:
+          - "**/*Tests.cs"
+          - "**/*Test.cs"
+        coverage_command: "dotnet test --collect:\"XPlat Code Coverage\""
+        
+      - name: MSTest
+        indicators:
+          - file: "*.csproj"
+            pattern: "MSTest"
+        test_patterns:
+          - "**/*Tests.cs"
+          - "**/*Test.cs"
+        coverage_command: "dotnet test --collect:\"XPlat Code Coverage\""
+        
+      - name: SpecFlow
+        indicators:
+          - file: "*.csproj"
+            pattern: "SpecFlow"
+        test_patterns:
+          - "**/*.feature"
+          - "**/*Steps.cs"
+        coverage_command: "dotnet test --collect:\"XPlat Code Coverage\""
+
+  # PHP
+  - name: PHP
+    extensions:
+      - .php
+    package_files:
+      - composer.json
+      - composer.lock
+    frameworks:
+      - name: PHPUnit
+        indicators:
+          - file: composer.json
+            pattern: "phpunit/phpunit"
+          - file: phpunit.xml
+            pattern: ""
+        test_patterns:
+          - "tests/**/*Test.php"
+          - "**/*Test.php"
+        coverage_command: "vendor/bin/phpunit --coverage-html coverage"
+        
+      - name: Codeception
+        indicators:
+          - file: composer.json
+            pattern: "codeception/codeception"
+          - file: codeception.yml
+            pattern: ""
+        test_patterns:
+          - "tests/**/*Cept.php"
+          - "tests/**/*Cest.php"
+          - "tests/**/*Test.php"
+        coverage_command: "vendor/bin/codecept run --coverage --coverage-html"
+        
+      - name: Pest
+        indicators:
+          - file: composer.json
+            pattern: "pestphp/pest"
+        test_patterns:
+          - "tests/**/*Test.php"
+          - "tests/**/*.php"
+        coverage_command: "vendor/bin/pest --coverage"
+
+# CI/CD Platform Detection
+cicd_platforms:
+  - name: GitHub Actions
+    indicators:
+      - file: .github/workflows
+        pattern: "*.yml|*.yaml"
+    
+  - name: GitLab CI
+    indicators:
+      - file: .gitlab-ci.yml
+        pattern: ""
+    
+  - name: Jenkins
+    indicators:
+      - file: Jenkinsfile
+        pattern: ""
+      - file: .jenkins
+        pattern: ""
+    
+  - name: CircleCI
+    indicators:
+      - file: .circleci/config.yml
+        pattern: ""
+    
+  - name: Travis CI
+    indicators:
+      - file: .travis.yml
+        pattern: ""
+    
+  - name: Azure Pipelines
+    indicators:
+      - file: azure-pipelines.yml
+        pattern: ""
+      - file: .azure
+        pattern: ""
+    
+  - name: Bitbucket Pipelines
+    indicators:
+      - file: bitbucket-pipelines.yml
+        pattern: ""
+    
+  - name: Drone CI
+    indicators:
+      - file: .drone.yml
+        pattern: ""
+
+# Test Type Classification Keywords
+test_classifications:
+  unit:
+    patterns:
+      - "unit"
+      - "unittest"
+      - "test_unit"
+    paths:
+      - "tests/unit/"
+      - "test/unit/"
+      - "src/test/"
+      
+  integration:
+    patterns:
+      - "integration"
+      - "test_integration"
+      - "int_test"
+    paths:
+      - "tests/integration/"
+      - "test/integration/"
+      
+  e2e:
+    patterns:
+      - "e2e"
+      - "end-to-end"
+      - "test_e2e"
+      - "playwright"
+      - "cypress"
+    paths:
+      - "tests/e2e/"
+      - "e2e/"
+      - "cypress/"
+      
+  performance:
+    patterns:
+      - "perf"
+      - "performance"
+      - "load"
+      - "stress"
+      - "benchmark"
+    paths:
+      - "tests/performance/"
+      - "perf/"
+      
+  smoke:
+    patterns:
+      - "smoke"
+      - "sanity"
+    paths:
+      - "tests/smoke/"
+
+# Maturity Scoring Weights
+maturity_weights:
+  coverage_percentage: 0.30
+  cicd_present: 0.20
+  test_diversity: 0.20
+  bdd_adoption: 0.15
+  unit_test_ratio: 0.10
+  test_file_count: 0.05

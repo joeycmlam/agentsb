@@ -94,7 +94,7 @@ class TestMcpServerSecurity:
     async def test_read_file_exception_handling(self):
         """Test that exceptions in read_file are properly handled and logged."""
         # Mock the converter to raise an exception
-        with patch.object(self.server.doc_converter, 'convert_file_async', side_effect=Exception(\"Test error\")):
+        with patch.object(self.server.doc_converter, 'convert_file_async', side_effect=Exception("Test error")):
             result = await self.server._tool_read_file({'file_path': 'test.txt'})
             
             assert result['success'] == False
@@ -133,7 +133,7 @@ class TestMcpServerSecurity:
     async def test_handle_call_tool_exception_logging(self):
         """Test that tool execution exceptions are properly logged."""
         # Mock a handler that raises an exception
-        with patch.object(self.server, '_tool_read_file', side_effect=Exception(\"Test error\")):
+        with patch.object(self.server, '_tool_read_file', side_effect=Exception("Test error")):
             with patch.object(self.server.logger, 'error') as mock_log:
                 result = await self.server._handle_call_tool('read_file', {'file_path': 'test.txt'})
                 
@@ -174,10 +174,10 @@ class TestMcpServerIntegration:
         tool_names = [tool.name for tool in tools]
         
         for expected_tool in expected_tools:
-            assert expected_tool in tool_names, f\"Tool {expected_tool} not found in tool list\"
+            assert expected_tool in tool_names, f"Tool {expected_tool} not found in tool list"
     
     def test_server_initialization(self):
-        \"\"\"Test that server initializes correctly.\"\"\"
+        """Test that server initializes correctly."""
         server = JiraMcpServer()
         
         assert server.server is not None
