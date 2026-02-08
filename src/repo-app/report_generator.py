@@ -14,6 +14,7 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils.dataframe import dataframe_to_rows
 
 from models import TestMetrics
+from logger import get_logger
 
 
 class ExcelReportGenerator:
@@ -21,7 +22,8 @@ class ExcelReportGenerator:
     
     def generate_report(self, metrics_list: List[TestMetrics], output_file: Path):
         """Generate Excel report with formatting"""
-        print(f"\n📊 Generating Excel report: {output_file}")
+        logger = get_logger()
+        logger.info(f"📊 Generating Excel report: {output_file}")
         
         # Convert to DataFrame
         data = [m.to_dict() for m in metrics_list]
@@ -113,4 +115,4 @@ class ExcelReportGenerator:
         
         # Save workbook
         wb.save(output_file)
-        print(f"✅ Report saved: {output_file}")
+        logger.info(f"✅ Report saved: {output_file}")

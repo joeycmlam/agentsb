@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 
 import requests
+from logger import get_logger
 
 
 class GitHubClient:
@@ -84,6 +85,7 @@ class GitHubClient:
     
     def clone_repo(self, repo_url: str, target_dir: Path) -> bool:
         """Clone a repository to target directory"""
+        logger = get_logger()
         try:
             result = subprocess.run(
                 ["git", "clone", "--depth", "1", repo_url, str(target_dir)],
@@ -91,7 +93,11 @@ class GitHubClient:
                 text=True,
                 timeout=300
             )
+            if result.returncode == 0:
+                logger.debug(f"Successfully cloned {repo_url}")
+            else:
+                logger.error(f"Clone failed: {result.stderr}")
             return result.returncode == 0
         except Exception as e:
-            print(f"❌ Clone failed: {e}")
+            logger.error(f"Clone failed: {e}")
             return False
