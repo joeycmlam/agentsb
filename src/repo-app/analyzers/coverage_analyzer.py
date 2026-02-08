@@ -7,6 +7,7 @@ Date: February 2026
 
 import asyncio
 import json
+import os
 import shutil
 import subprocess
 from datetime import datetime
@@ -391,11 +392,13 @@ Examples:
         """
         logger = get_logger()
         coverage_found = False
+        coverage_file_found = None
         
         # Python: coverage.xml or .coverage
         coverage_xml = repo_path / "coverage.xml"
         if coverage_xml.exists():
             coverage_found = True
+            coverage_file_found = coverage_xml
             logger.debug(f"Found coverage report: {coverage_xml.name}")
             self._parse_python_coverage_xml(coverage_xml, metrics)
         
@@ -403,12 +406,20 @@ Examples:
         coverage_summary = repo_path / "coverage" / "coverage-summary.json"
         if coverage_summary.exists():
             coverage_found = True
+            coverage_file_found = coverage_summary
             logger.debug(f"Found coverage report: {coverage_summary.relative_to(repo_path)}")
             self._parse_js_coverage_json(coverage_summary, metrics)
         
         if coverage_found:
             source = "Generated" if getattr(metrics, 'coverage_generated', False) else "Existing"
             logger.info(f"   📊 Using {source.lower()} coverage report")
+            
+            # Save coverage report to persistent location
+            if coverage_file_found:
+                saved_path = self._save_coverage_report(coverage_file_found, metrics.repo_name)
+                if saved_path:
+                    metrics.coverage_report_path = str(saved_path)
+                    logger.debug(f"Coverage report saved to: {saved_path}")
         else:
             logger.debug("No coverage reports found")
             log_metric(COVERAGE_SOURCE_METRIC, "None")
@@ -426,8 +437,8 @@ Examples:
             tree = ET.parse(coverage_file)
             root = tree.getroot()
             
-            # Get overall coverage
-            coverage_elem = root.find(".//coverage")
+            # Get overall coverage - root element is typically <coverage>
+            coverage_elem = root if root.tag == "coverage" else root.find(".//coverage")
             if coverage_elem is not None:
                 line_rate = float(coverage_elem.get("line-rate", 0))
                 metrics.unit_test_coverage_pct = line_rate * 100
@@ -462,3 +473,45 @@ Examples:
             log_metric("JS Coverage", f"{metrics.unit_test_coverage_pct:.1f}%")
         except Exception as e:
             get_logger().warning(f"Failed to parse coverage-summary.json: {e}")
+    
+    def _save_coverage_report(self, coverage_file: Path, repo_name: str) -> Optional[Path]:
+        """
+        Save coverage report to persistent location.
+        
+        Args:
+            coverage_file: Path to coverage report file
+            repo_name: Repository name for organizing reports
+            
+        Returns:
+            Path to saved coverage report or None if failed
+        """
+        logger = get_logger()
+        
+        try:
+            # Create reports/coverage directory
+            reports_dir = Path("reports") / "coverage"
+            reports_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create sanitized repo name for file/folder
+            safe_repo_name = repo_name.replace('/', '_').replace(' ', '_')
+            
+            # Determine destination based on file type
+            if coverage_file.name == "coverage.xml":
+                # Save Python coverage.xml directly
+                dest_file = reports_dir / f"{safe_repo_name}_coverage.xml"
+                shutil.copy2(coverage_file, dest_file)
+                return dest_file
+            elif coverage_file.name == "coverage-summary.json":
+                # Save JavaScript coverage-summary.json
+                dest_file = reports_dir / f"{safe_repo_name}_coverage_summary.json"
+                shutil.copy2(coverage_file, dest_file)
+                return dest_file
+            else:
+                # Copy the file with original name
+                dest_file = reports_dir / f"{safe_repo_name}_{coverage_file.name}"
+                shutil.copy2(coverage_file, dest_file)
+                return dest_file
+                
+        except Exception as e:
+            logger.warning(f"Failed to save coverage report: {e}")
+            return None

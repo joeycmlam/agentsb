@@ -38,6 +38,7 @@ class ExcelReportGenerator:
         column_order = [
             'repo_name', 'analysis_status', 'last_analyzed',
             'unit_test_count', 'unit_test_coverage_pct', 'unit_test_lines_covered', 'unit_test_lines_total',
+            'coverage_report_path',
             'feature_test_scenarios', 'feature_test_files',
             'performance_test_count', 'performance_test_files',
             'e2e_test_count', 'e2e_test_files',
@@ -63,6 +64,7 @@ class ExcelReportGenerator:
         headers = [
             'Repository', 'Status', 'Last Analyzed',
             'Unit Tests', 'Coverage %', 'Lines Covered', 'Total Lines',
+            'Coverage Report',
             'Feature Scenarios', 'Feature Files',
             'Perf Tests', 'Perf Files',
             'E2E Tests', 'E2E Files',
