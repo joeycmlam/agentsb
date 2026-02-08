@@ -298,7 +298,7 @@ class TestSecurityValidation:
         for path in dangerous_paths:
             normalized = os.path.normpath(path)
             # The security check should catch paths starting with '..'
-            assert normalized.startswith('..'), f\"Path {path} should be flagged as dangerous\"
+            assert normalized.startswith('..'), f"Path {path} should be flagged as dangerous"
     
     def test_safe_path_validation(self):
         """Test that safe paths pass validation."""
@@ -312,7 +312,7 @@ class TestSecurityValidation:
         for path in safe_paths:
             normalized = os.path.normpath(path)
             # These should not start with '..' after normalization
-            assert not normalized.startswith('..'), f\"Path {path} should be considered safe\"
+            assert not normalized.startswith('..'), f"Path {path} should be considered safe"
 
 
 if __name__ == '__main__':
