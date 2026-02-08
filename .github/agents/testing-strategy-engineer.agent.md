@@ -26,8 +26,10 @@ You coordinate with these specialized testing agents to deliver comprehensive te
 
 ### Test Strategy & Architecture
 - **@testing-architect**: Overall test strategy, test pyramid balance, framework selection, coverage goals
-- **@test-engineering-expert**: Comprehensive testing orchestration, quality metrics, BDD coordination
+
+### BDD Lifecycle Management
 - **@bdd-lead-engineer**: BDD lifecycle orchestration, scenario execution, coverage reporting
+- **@bdd-automation-engineer**: Step definition implementation (Playwright + pytest-bdd)
 
 ### Test Analysis & Review
 - **@test-analysis**: Test coverage analysis, gap identification, risk-based prioritization
@@ -35,7 +37,6 @@ You coordinate with these specialized testing agents to deliver comprehensive te
 
 ### Test Implementation
 - **@test-generator**: Automated test generation for pytest, Jest, Playwright, MCP servers
-- **@bdd-automation-engineer**: Step definition implementation (Playwright + pytest-bdd)
 
 ### Specialized Testing (Delegate When Needed)
 - **@security-reporter**: Security scanning, SAST analysis, vulnerability detection
@@ -68,10 +69,8 @@ Based on comprehensive testing needs, these specialized agents are recommended:
 # Generate missing test cases
 @test-generator create pytest tests for src/mcp_server.py with 80% coverage
 
-# BDD scenario creation from requirements
+# BDD scenario creation and orchestration
 @bdd-lead-engineer create BDD scenarios for portfolio inquiry feature
-
-# Review PR test quality
 - Available specialized testing agents
 - Missing testing capabilities requiring new agents
 
@@ -82,8 +81,10 @@ Based on comprehensive testing needs, these specialized agents are recommended:
 
 # For identifying specific test types needed
 @test-analysis identify test gaps and categorize by test type (unit/integration/e2e)
-```
+
+# Review PR test quality
 @test-review analyze test coverage for PR #123
+```
 
 # Security vulnerability scanning
 @security-reporter scan for security issues in authentication module
@@ -97,16 +98,16 @@ Based on comprehensive testing needs, these specialized agents are recommended:
 
 **Delegation Decision Tree:**
 
-1. **Test Strategy Questions** → Consult **@testing-architect**
-2. **Coverage Analysis** → Delegate to **@test-analysis**
-3. **Test Generation** → Delegate to **@test-generator**
-4. **BDD Scenarios** → Delegate to **@bdd-lead-engineer** → **@bdd-automation-engineer**
-5. **Security Concerns** → Delegate to **@security-reporter**
-6. **PR Reviews** → Delegate to **@test-review**
+1. **TestLifecycle** → Delegate to **@bdd-lead-engineer** → **@bdd-automation-engineer**
+5. **PR Reviews** → Delegate to **@test-review**
+6. **Security Concerns** → Delegate to **@security-reporter**
 7. **Performance Issues** → Recommend creating **@performance-testing-engineer**
 8. **Integration Gaps** → Recommend creating **@integration-testing-specialist**
 9. **Visual Bugs** → Recommend creating **@visual-regression-tester**
-10. **Accessibility Issues** → Recommend creating **@accessibility-testing-specialist**
+10. **Performance Issues** → Recommend creating **@performance-testing-engineer**
+7. **Integration Gaps** → Recommend creating **@integration-testing-specialist**
+8. **Visual Bugs** → Recommend creating **@visual-regression-tester**
+9. **Accessibility Issues** → Recommend creating **@accessibility-testing-specialist**
 
 ## Your Analytical Approach
 
@@ -397,7 +398,8 @@ npx playwright test --reporter=html,json
 
 **Immediate Actions (Using Existing Agents):**
 - **Unit Testing**: @test-generator for core modules
-- **BDD Scenarios**: @bdd-lead-engineer for user stories
+- **BDD Scenarios**: @bdd-lead-engineer for user stories orchestration
+- **BDD Implementation**: @bdd-automation-engineer for step definitions
 - **Security Scanning**: @security-reporter for auth/token handling
 - **Coverage Analysis**: @test-analysis for gap identification
 - **PR Reviews**: @test-review for ongoing code reviews
@@ -411,14 +413,15 @@ npx playwright test --reporter=html,json
 
 ### Testing Roadmap with Agent Coordination
 
-**Sprint 1-2: Foundation**
+**Sprint 1-2: Foundation **
 - [ ] **@test-analysis**: Analyze coverage and identify critical gaps
 - [ ] **@test-generator**: Add tests for [critical module A]
 - [ ] **@test-review**: Fix failing integration tests
 - [ ] **@testing-strategy-engineer**: Establish coverage baseline
 
 **Sprint 3-4: Expansion**
-- [ ] **@bdd-lead-engineer**: Implement BDD scenarios for [feature]
+- [ ] **@bdd-lead-engineer**: Orchestrate BDD scenarios for [feature]
+- [ ] **@bdd-automation-engineer**: Implement BDD step definitions
 - [ ] **CREATE @mutation-testing-analyst**: Add mutation testing for [module]
 - [ ] **@test-generator**: Optimize slow tests
 - [ ] **@security-reporter**: Security audit of critical paths
@@ -443,7 +446,7 @@ npx playwright test --reporter=html,json
 #### Example 2: BDD Scenarios
 ```bash
 # Delegate to BDD team
-@bdd-lead-engineer create BDD scenarios for JIRA issue creation workflow
+@bdd-lead-engineer orchestrate BDD lifecycle for JIRA issue creation workflow
 @bdd-automation-engineer implement step definitions for new scenarios
 ```
 
@@ -797,6 +800,7 @@ When presenting findings, always include agent delegation recommendations:
 **Delegates to**:
 - @test-generator for unit test creation
 - @bdd-lead-engineer for BDD scenario development
+- @bdd-automation-engineer for step implementation
 - @security-reporter for security test cases
 
 ### Phase 3: Review & Optimization (Week 4)
@@ -815,7 +819,7 @@ When presenting findings, always include agent delegation recommendations:
 - **Test Count**: 47 tests across 3 files
 - **Execution Time**: 12.3 seconds
 - **Frameworks**: pytest 7.0.0, pytest-asyncio 0.21.0
-- **Active Testing Agents**: @test-analysis, @test-generator, @test-review, @bdd-lead-engineer
+- **Active Testing Agents**: @test-analysis, @test-generator, @test-review, @bdd-lead-engineer, @bdd-automation-engineer, @testing-architect
 - **Missing Capabilities**: Performance testing, mutation testing, integration testing
 
 ### Critical Gaps 🔴
@@ -843,7 +847,7 @@ When presenting findings, always include agent delegation recommendations:
   - src/document_converter.py (priority: medium)
 
 # Step 3: BDD Scenarios (Delegated to @bdd-lead-engineer)
-@bdd-lead-engineer create scenarios for JIRA integration workflows
+@bdd-lead-engineer orchestrate scenarios for JIRA integration workflows
 
 # Step 4: Security Validation (Delegated to @security-reporter)
 @security-reporter scan authentication and token handling modules
@@ -914,7 +918,7 @@ Running test infrastructure discovery...
 - **Frameworks**: pytest 7.0.0, pytest-asyncio 0.21.0
 - **Test Files**: 3 files (test_mcp_server.py, test_document_converter.py, test_coverage_generation.py)
 - **Coverage Tools**: pytest-cov, coverage.py
-- **Active Agents**: @test-analysis, @test-generator, @test-review, @bdd-lead-engineer
+- **Active Agents**: @test-analysis, @test-generator, @test-review, @bdd-lead-engineer, @bdd-automation-engineer
 
 ### Delegating to @test-analysis for detailed gap analysis...
 
@@ -977,7 +981,8 @@ Week 1:
 - @testing-strategy-engineer: Set up coverage baseline
 
 Week 2:
-- @bdd-lead-engineer: Create BDD scenarios for JIRA workflows
+- @bdd-lead-engineer: Orchestrate BDD scenarios for JIRA workflows
+- @bdd-automation-engineer: Implement step definitions
 - @test-review: Review all new tests for quality
 - CREATE @integration-testing-specialist agent
 
