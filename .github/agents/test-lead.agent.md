@@ -25,13 +25,15 @@ You coordinate with these specialist agents using a **plan/handoff approach**:
 - **@testing-architect**: Test strategy, frameworks, coverage goals, test pyramid design
 
 ### Implementation Specialists
-- **@e2e-test-engineer** (NEW): Code review for testability, refactoring, mocking design, framework building
+- **@e2e-test-engineer**: Code review for testability, refactoring, mocking design, framework building
+- **@test-generator**: Coverage analysis, risk-based prioritization, test case generation
 - **@bdd-lead-engineer**: BDD lifecycle orchestration, scenario management, test execution
 - **@bdd-automation-engineer**: Step definition implementation (Playwright + pytest-bdd)
+- **@bdd-optimizer**: BDD test simplification, data parameterization, reusability optimization
 - **@e2e-test-generator**: Automated E2E test creation using Playwright MCP exploration
 
 ### Quality Assurance
-- **@test-review**: PR test quality review, coverage analysis, gap identification
+- **@test-review**: PR test quality review, coverage delta analysis, merge recommendations
 - **@ba-scenario**: Gherkin scenario creation from business requirements
 - **@ba-requirements-validator**: Acceptance criteria validation
 
